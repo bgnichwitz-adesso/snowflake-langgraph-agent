@@ -10,6 +10,11 @@ infrastructure. See `phase0_report.md` for the architecture rationale and
 Every account-specific value lives in **`.env`** — set it once and the scripts
 target your account, database, warehouse, and model. No code edits needed.
 
+> **Status:** Phase 0 (bootstrap) is **complete** — see `phase0_report.md` for
+> evidence and `docs/SESSION_PROTOCOL_2026-06-15.md` for the full session record
+> and where to continue (Phase 1). On the original account the Snowflake objects
+> already exist; the run order below is for a **fresh account / colleague setup**.
+
 ---
 
 ## Prerequisites

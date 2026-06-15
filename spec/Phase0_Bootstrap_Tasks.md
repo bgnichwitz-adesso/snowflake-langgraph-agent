@@ -1,3 +1,10 @@
+> ## ✅ STATUS: PHASE 0 COMPLETE (2026-06-15) — DO NOT RE-RUN
+> All 6 packages PASS. Evidence: `../phase0_report.md`. Session protocol:
+> `../docs/SESSION_PROTOCOL_2026-06-15.md`. The objects already exist in
+> Snowflake (db/schema/pool/repo, 5 roles, TASK_SPECS + view).
+> **Continue at Phase 1** (open points listed in `phase0_report.md`), not here.
+> This document is kept for historical reference / fresh-account setup only.
+
 # Phase 0 — Bootstrap Tasks
 ### Direkte Anweisungen für Claude Code · Heute Abend 13.06.2026
 
