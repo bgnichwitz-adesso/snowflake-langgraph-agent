@@ -1,0 +1,9 @@
+# secrets — never commit
+.secrets/
+*.pat
+*.env
+
+# python
+.venv/
+__pycache__/
+*.pyc
