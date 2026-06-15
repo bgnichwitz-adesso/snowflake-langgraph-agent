@@ -1,0 +1,5 @@
+# Laptop-side dependencies (the venv that runs scripts/). Pinned to tested
+# versions. keyring + keyrings.alt enable headless token storage on Linux.
+snowflake-connector-python==4.6.0
+keyring==25.7.0
+keyrings.alt==5.0.2
