@@ -9,44 +9,46 @@ import json
 import sys
 import time
 
+import config
 from sf import connect
 
-DB = "PREPSMART"
-SCHEMA = "ORCHESTRATOR"
-POOL = "PREPSMART_POOL_XS"
+DB = config.DATABASE
+SCHEMA = config.SCHEMA
+POOL = config.POOL
 SVC = "BOOTSTRAP_SVC"
 FQ_SVC = f"{DB}.{SCHEMA}.{SVC}"
 
-SPEC = """
+
+def main() -> int:
+    tag = sys.argv[1] if len(sys.argv) > 1 else "phase0"
+    spec = f"""
 spec:
   containers:
     - name: bootstrap
-      image: /prepsmart/orchestrator/images/orchestrator_base:phase0
+      image: {config.spec_image_path(tag)}
 """
-
-CREATE_SERVICE = f"""
+    create_service = f"""
 CREATE SERVICE IF NOT EXISTS {FQ_SVC}
   IN COMPUTE POOL {POOL}
-  FROM SPECIFICATION $${SPEC}$$
+  FROM SPECIFICATION $${spec}$$
   MIN_INSTANCES = 1
   MAX_INSTANCES = 1
 """
-
-
-def main() -> int:
     try:
         with connect() as conn:
             cur = conn.cursor()
 
             print("=== IMAGES IN REPOSITORY ===")
-            cur.execute(f"SHOW IMAGES IN IMAGE REPOSITORY {DB}.{SCHEMA}.IMAGES")
+            cur.execute(
+                f"SHOW IMAGES IN IMAGE REPOSITORY {DB}.{SCHEMA}.{config.IMAGE_REPO}"
+            )
             cols = [c[0].lower() for c in cur.description]
             for row in cur.fetchall():
                 rec = dict(zip(cols, row))
                 print(f"  {rec.get('image_name')}  tags={rec.get('tags')}")
 
             print("\n=== CREATE SERVICE ===")
-            cur.execute(CREATE_SERVICE)
+            cur.execute(create_service)
             print(f"  submitted: {FQ_SVC}")
 
             print("\n=== POLL FOR READY ===")

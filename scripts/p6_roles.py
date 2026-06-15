@@ -7,10 +7,11 @@ conditions and prints evidence.
 """
 import sys
 
+import config
 from sf import connect
 
-DB = "PREPSMART"
-SCHEMA = "ORCHESTRATOR"
+DB = config.DATABASE
+SCHEMA = config.SCHEMA
 FQT = f"{DB}.{SCHEMA}.TASK_SPECS"
 FQV = f"{DB}.{SCHEMA}.TASK_SPECS_CURRENT"
 

@@ -11,7 +11,7 @@ from typing import TypedDict
 import snowflake.connector
 from langgraph.graph import END, START, StateGraph
 
-MODEL = "claude-sonnet-4-6"
+MODEL = os.environ.get("CORTEX_MODEL", "claude-sonnet-4-6")
 TOKEN_PATH = "/snowflake/session/token"
 
 

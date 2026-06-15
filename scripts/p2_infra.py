@@ -1,24 +1,25 @@
 """Package 2 (part 1) — create SPCS infrastructure objects.
 
-Creates: PREPSMART db, ORCHESTRATOR schema, a minimal XS compute pool, and an
-image repository. Prints the image repository URL (needed for the podman push)
-and the compute pool state as evidence. Scope: infra only, no app logic.
+Creates the database, schema, a minimal compute pool, and an image repository
+(all names from config / .env). Prints the image repository URL (needed for the
+image push) and the compute pool state as evidence. Scope: infra only.
 """
 import sys
 
+import config
 from sf import connect
 
-DB = "PREPSMART"
-SCHEMA = "ORCHESTRATOR"
-POOL = "PREPSMART_POOL_XS"
-REPO = "IMAGES"
+DB = config.DATABASE
+SCHEMA = config.SCHEMA
+POOL = config.POOL
+REPO = config.IMAGE_REPO
 
 STATEMENTS = [
     f"CREATE DATABASE IF NOT EXISTS {DB}",
     f"CREATE SCHEMA IF NOT EXISTS {DB}.{SCHEMA}",
     (
         f"CREATE COMPUTE POOL IF NOT EXISTS {POOL} "
-        "MIN_NODES = 1 MAX_NODES = 1 INSTANCE_FAMILY = CPU_X64_XS "
+        f"MIN_NODES = 1 MAX_NODES = 1 INSTANCE_FAMILY = {config.INSTANCE_FAMILY} "
         "AUTO_SUSPEND_SECS = 600 AUTO_RESUME = TRUE"
     ),
     f"CREATE IMAGE REPOSITORY IF NOT EXISTS {DB}.{SCHEMA}.{REPO}",

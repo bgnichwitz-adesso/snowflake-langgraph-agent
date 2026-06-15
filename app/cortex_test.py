@@ -10,7 +10,7 @@ import sys
 
 import snowflake.connector
 
-MODEL = "claude-sonnet-4-6"
+MODEL = os.environ.get("CORTEX_MODEL", "claude-sonnet-4-6")
 PROMPT = "say: HELLO"
 TOKEN_PATH = "/snowflake/session/token"
 

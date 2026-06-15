@@ -1,7 +1,9 @@
-# secrets — never commit
+# secrets / local config — never commit
 .secrets/
 *.pat
-*.env
+.env
+.env.*
+!.env.example
 
 # python
 .venv/

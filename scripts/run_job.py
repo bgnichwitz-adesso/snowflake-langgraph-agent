@@ -8,11 +8,12 @@ Usage:
 import argparse
 import sys
 
+import config
 from sf import connect
 
-DB = "PREPSMART"
-SCHEMA = "ORCHESTRATOR"
-POOL = "PREPSMART_POOL_XS"
+DB = config.DATABASE
+SCHEMA = config.SCHEMA
+POOL = config.POOL
 
 
 def build_spec(tag: str, command: list[str]) -> str:
@@ -21,8 +22,11 @@ def build_spec(tag: str, command: list[str]) -> str:
 spec:
   containers:
     - name: main
-      image: /prepsmart/orchestrator/images/orchestrator_base:{tag}
+      image: {config.spec_image_path(tag)}
       command: [{cmd_yaml}]
+      env:
+        CORTEX_MODEL: "{config.CORTEX_MODEL}"
+        SNOWFLAKE_WAREHOUSE: "{config.WAREHOUSE}"
 """
 
 

@@ -1,13 +1,13 @@
-# Package 2 — minimal SPCS base image: Python + snowflake-connector-python.
-# Scope: no LangGraph, no Cortex, no app logic. A long-running container so the
-# bootstrap service reaches status READY.
+# Orchestrator base image: Python + snowflake-connector-python + langgraph (MIT).
+# Dependencies pinned in docker/requirements.txt for reproducibility.
 FROM python:3.11-slim
 
-# langgraph = MIT library only. NOT langgraph-api / langgraph-cli (Elastic 2.0).
-RUN pip install --no-cache-dir snowflake-connector-python langgraph
+COPY docker/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 # In-container scripts (cortex test, langgraph flow).
 COPY app/ /app/
 
-# Stay alive so SHOW SERVICES reports READY; print a marker on startup.
+# Default: stay alive so a long-running service reaches status READY.
+# Job-services override this with their own command in the service spec.
 CMD ["python", "-u", "-c", "import time, snowflake.connector as c; print('container up — connector', c.__version__, flush=True); time.sleep(1e9)"]

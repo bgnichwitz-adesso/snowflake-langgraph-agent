@@ -6,38 +6,41 @@ logs via SYSTEM$GET_SERVICE_LOGS and check for the response markers.
 """
 import sys
 
+import config
 from sf import connect
 
-DB = "PREPSMART"
-SCHEMA = "ORCHESTRATOR"
-POOL = "PREPSMART_POOL_XS"
+DB = config.DATABASE
+SCHEMA = config.SCHEMA
+POOL = config.POOL
 JOB = "CORTEX_TEST_JOB"
 FQ_JOB = f"{DB}.{SCHEMA}.{JOB}"
 
-SPEC = """
+
+def main() -> int:
+    tag = sys.argv[1] if len(sys.argv) > 1 else "p3"
+    spec = f"""
 spec:
   containers:
     - name: main
-      image: /prepsmart/orchestrator/images/orchestrator_base:p3
+      image: {config.spec_image_path(tag)}
       command: ["python", "-u", "/app/cortex_test.py"]
+      env:
+        CORTEX_MODEL: "{config.CORTEX_MODEL}"
+        SNOWFLAKE_WAREHOUSE: "{config.WAREHOUSE}"
 """
-
-EXECUTE_JOB = f"""
+    execute_job = f"""
 EXECUTE JOB SERVICE
   IN COMPUTE POOL {POOL}
   NAME = {FQ_JOB}
-  FROM SPECIFICATION $${SPEC}$$
+  FROM SPECIFICATION $${spec}$$
 """
-
-
-def main() -> int:
     try:
         with connect() as conn:
             cur = conn.cursor()
             cur.execute(f"DROP SERVICE IF EXISTS {FQ_JOB}")
             print("=== EXECUTE JOB SERVICE (blocks until done) ===")
             try:
-                cur.execute(EXECUTE_JOB)
+                cur.execute(execute_job)
                 print(f"  job finished: {FQ_JOB}")
             except Exception as exc:  # noqa: BLE001 - still try to read logs
                 print(f"  job raised: {type(exc).__name__}: {exc}")
