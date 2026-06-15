@@ -87,12 +87,13 @@ TASK_SPECS_CURRENT view: query OK (0 rows)
    Programmatic Access Token (role-scoped, headless, no account-wide toggle).
    The same PAT authenticates the podman registry login.
 
-2. **Cortex via SQL `COMPLETE`, not the snowpark `Complete(...)` wrapper.**
-   The arch note shows `snowflake.cortex.Complete(model, prompt, session=...)`.
-   We call `SELECT SNOWFLAKE.CORTEX.COMPLETE(...)` over the connector instead —
-   functionally identical (internal, no egress) and avoids pulling snowpark /
-   pandas / pyarrow into the image. **Confirm this is acceptable**, or Phase 1
-   switches to the snowpark wrapper.
+2. **Cortex via SQL `COMPLETE`, not the snowpark `Complete(...)` wrapper —
+   DECIDED.** We call `SELECT SNOWFLAKE.CORTEX.COMPLETE(...)` over the connector:
+   functionally identical (internal, no egress), keeps the image light (connector
+   only, no snowpark/pandas/pyarrow), and is a more stable contract. Phase 1 moves
+   to the **3-arg JSON form**: messages array (system+user), options
+   `{'temperature': 0, 'max_tokens': ...}`, parsing `choices` + `usage` (token
+   counts for cost tracking).
 
 3. **Bootstrap service is long-running (sleep), not a job-service.** Package 2's
    gate is status READY, which a run-to-completion job never shows. The
@@ -105,7 +106,8 @@ TASK_SPECS_CURRENT view: query OK (0 rows)
 ## Open points for Phase 1
 
 - [ ] Drop or repurpose `BOOTSTRAP_SVC` (it holds the compute pool warm).
-- [ ] Decide Cortex call style: SQL `COMPLETE` vs snowpark wrapper (note 2).
+- [x] Cortex call style — DECIDED: SQL `COMPLETE` via connector. Phase 1 task:
+      implement the 3-arg JSON form (messages, temperature=0, capture `usage`).
 - [ ] PAT lifecycle: expiry/rotation; move off ACCOUNTADMIN to a least-priv role.
 - [ ] Remaining tables (DEV_COMMENTS, TEST_RESULTS, TENANTS, USERS, …) + Row
       Access Policies for multi-tenant isolation (TENANT_ID + USER_ID).
