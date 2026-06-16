@@ -45,7 +45,22 @@ INSTANCE_FAMILY = _get("SF_INSTANCE_FAMILY", "CPU_X64_XS")
 ROLE_PREFIX = _get("SF_ROLE_PREFIX", "ORCH")
 ROLE_SUFFIXES = ["LEAD", "DEVELOPER", "TESTER", "RUNNER", "HUMAN_IN_LOOP"]
 ROLES = [f"{ROLE_PREFIX}_{s}" for s in ROLE_SUFFIXES]
-LEAD_ROLE = f"{ROLE_PREFIX}_LEAD"  # the only role with INSERT on TASK_SPECS
+LEAD_ROLE = f"{ROLE_PREFIX}_LEAD"      # the only role with INSERT on TASK_SPECS
+RUNNER_ROLE = f"{ROLE_PREFIX}_RUNNER"  # orchestrator service identity
+
+# Tag for account-level objects we manage, so collisions with foreign objects
+# can be detected (existing+ours -> reuse; existing+foreign -> Exception).
+MANAGED_BY = f"managed-by:orchestrator;instance:{DATABASE}"
+
+
+def project_role(project_id: str) -> str:
+    """Per-project execution role, e.g. ORCH_PROJ_DEMO."""
+    return f"{ROLE_PREFIX}_PROJ_{project_id.upper()}"
+
+
+def artifact_schema(project_id: str) -> str:
+    """Per-project artifact schema, e.g. ORCHESTRATOR.DEMO."""
+    return f"{DATABASE}.{project_id.upper()}"
 
 # --- Image repository / image ---
 IMAGE_REPO = _get("SF_IMAGE_REPO", "IMAGES")

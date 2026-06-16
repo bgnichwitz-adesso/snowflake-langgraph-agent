@@ -102,9 +102,9 @@ LangGraph-Checkpointing auf Stage → resümierbar. Gate = einzige Wahrheit
 
 | # | Paket | Pass-Gate |
 |---|---|---|
-| **1.0** | **Eigenes Zuhause (Rename-Migration):** DB `ORCHESTRATOR`, Schema `CORE`, Pool `ORCH_POOL_XS`, Repo `ORCHESTRATOR.CORE.IMAGES`, `ORCH_*`-Workflow-Rollen, `PROJECTS` + `TASK_SPECS`(+project_id) + View. Image neu pushen. **Alte PREPSMART-Objekte droppen.** | Neue Objekte da, Grants korrekt (INSERT nur LEAD), alte weg, Job läuft auf neuem Image |
-| **1.1** | **Projekt-Registry + `register_project`:** Script legt `ORCH_PROJ_<ID>`-Rolle an, Artefakt-Schema `ORCHESTRATOR.<ID>` + `CODE_STAGE`, grantet auf existierende Projekt-DB + Artefakt-Schema, grantet Rolle an `ORCH_RUNNER`, schreibt `PROJECTS`-Zeile | Test-Projekt registriert: Rolle da + an RUNNER granted, PROJECTS-Zeile da, RUNNER kann Rolle nutzen + Artefakt-Schema erreichen |
-| **1.2** | **Per-Projekt Artefakt-Tabellen:** `DEV_COMMENTS`, `TEST_RESULTS` (append-only) + `CODE_STAGE` im Artefakt-Schema (von register_project mit angelegt) | Tabellen/Stage existieren, INSERT-only-Grants, Stage schreibbar |
+| **1.0 ✅** | **Eigenes Zuhause (Rename-Migration):** DB `ORCHESTRATOR`, Schema `CORE`, Pool `ORCH_POOL_XS`, Repo `ORCHESTRATOR.CORE.IMAGES`, `ORCH_*`-Workflow-Rollen, `PROJECTS` + `TASK_SPECS`(+project_id) + View. Image neu pushen. **Alte PREPSMART-Objekte droppen.** | ✅ Neue Objekte da, Grants korrekt (INSERT nur LEAD), alte weg, Job läuft auf neuem Image |
+| **1.1 ✅** (+1.2) | **Projekt-Registry + `register_project`** (`scripts/register_project.py`): legt `ORCH_PROJ_<ID>`-Rolle an (getaggt, Kollisions-guard), Artefakt-Schema `ORCHESTRATOR.<ID>` + `CODE_STAGE` + `DEV_COMMENTS` + `TEST_RESULTS`, grantet auf existierende Projekt-DB + Artefakt-Schema, grantet Rolle an `ORCH_RUNNER`, schreibt `PROJECTS`-Zeile | ✅ `DEMO` registriert: Rolle an RUNNER granted, PROJECTS-Zeile da, Artefakt-Schema + Tabellen + Stage da |
+| **1.2 ✅** | *(in 1.1 enthalten)* Per-Projekt `DEV_COMMENTS`, `TEST_RESULTS`, `CODE_STAGE` im Artefakt-Schema | ✅ via register_project angelegt |
 | **1.3** | **Cortex-Generierungs-Node:** `cortex_complete(messages, temperature=0)` → Text **+ usage** (3-arg JSON-Form) | Antwort + Token-Counts |
 | **1.4** | **Stage-I/O aus Container** (unter Projektrolle): Code nach `CODE_STAGE/<task>/<iter>/` schreiben + zurücklesen | Datei-Round-Trip PASS |
 | **1.5** | **Test-Runner + Gate:** Code vom Stage, pytest/ruff, Exit-Code+Log → `TEST_RESULTS` | grün→PASS-Row, rot→FAIL-Row; Gate liest nur Exit-Code |

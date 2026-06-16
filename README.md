@@ -105,6 +105,25 @@ Each script prints **PASS** with evidence (version, status, query result) or
 
 ---
 
+## Register a project
+
+The orchestrator is multi-project. Each project (whose database the project team
+already owns) is onboarded once — no code change:
+
+```bash
+python scripts/register_project.py --id DEMO --project-db DEMO_PROJ \
+    --description "what this project is"
+```
+This creates the per-project execution role `ORCH_PROJ_<ID>` (tagged), the
+artifact schema `ORCHESTRATOR.<ID>` (with `CODE_STAGE`, `DEV_COMMENTS`,
+`TEST_RESULTS`), grants the role on the existing project DB + artifacts, grants
+it to `ORCH_RUNNER`, and writes a row to `ORCHESTRATOR.CORE.PROJECTS`. Tasks in
+`TASK_SPECS` reference their `project_id`; the loop looks it up and runs under
+the project's execution role. A name collision with a *foreign* account-level
+role is raised as an exception (not silently reused).
+
+---
+
 ## Health check
 
 One config-driven script verifies the whole deployment and prints **OK / NOT OK**
