@@ -44,6 +44,45 @@ Snowflake, kein GitHub-Egress** (bewusste Architekturentscheidung, läuft übera
 kennt Beschreibung + `execution_role` + Orte, macht `USE ROLE <execution_role>`
 und arbeitet scoped. Deterministisch, keine Rätsel.
 
+---
+
+## Multi-Tenancy & Sicherheit (Instanz-Modell)
+
+### Tenant = Datenbank (kein RAP)
+- Isolation läuft über **getrennte Datenbanken**, nicht über Row Access Policies.
+  RAP ist operativ teuer (Rollen-/Access-Management beim zentralen Team) → wird
+  bewusst **nicht** verwendet. Jede DB = eigener Namespace → DB-Objekte können
+  nicht kollidieren.
+- **Mehrere unabhängige Instanzen pro Account** sind erlaubt (eine DB = eine
+  Instanz). Konfiguriert über `.env` (`SF_DATABASE`, `SF_POOL`,
+  `SF_ROLE_PREFIX` …) — selber Code, keine Forks.
+
+### Account-Level-Objekte = Kollisionsrisiko → Exception
+- DB-/Schema-scoped (DB, Schema, Image-Repo, Tabellen, Stages, Secrets,
+  Network Rules) sind pro Instanz isoliert.
+- **Account-Level** (Compute Pool, Rollen, External Access Integrations) liegen
+  außerhalb der DB → können zwischen Instanzen kollidieren.
+- Unsere Account-Objekte werden getaggt: `COMMENT =
+  'managed-by:orchestrator;instance:<id>'`.
+  - existiert + **unseres** → ok (reuse).
+  - existiert + **fremd/ungetaggt** → **Exception**: Pipeline hält an, braucht
+    User-Eingriff/Feedback. **Kein** stiller Reuse.
+
+### Pipeline-Rolle: kein DROP, kein OR REPLACE
+- `ORCH_RUNNER` / `ORCH_PROJ_<ID>` haben **kein DROP-Recht** (Schutz).
+- `CREATE OR REPLACE` ist implizit ein DROP → für die Pipeline **verboten**. Nur
+  `CREATE` / `CREATE IF NOT EXISTS`, ggf. versioniert.
+
+### Statt Drop: Versionierung + human-gated Cleanup
+- Müsste der Orchestrator ein Objekt ersetzen → **Versions-Suffix `_V2/_V3/…`**,
+  Loop läuft weiter (**kein** Abbruch).
+- Der Agent schreibt einen **Cleanup-Bericht** (append-only, in
+  `ORCHESTRATOR.<PROJECT_ID>` / Stage): welche alten Versionen zur Löschung
+  anstehen + warum.
+- Dazu erzeugt er **vorab ein Cleanup-Script** (idempotente `DROP`-Statements).
+  Der **User** führt es nach Prüfung mit erhöhten Rechten selbst aus. Löschung
+  ist immer human-gated.
+
 ### Loop
 ```
 load_task (LOCKED, + PROJECTS-Lookup, USE ROLE execution_role)
@@ -72,8 +111,10 @@ LangGraph-Checkpointing auf Stage → resümierbar. Gate = einzige Wahrheit
 | **1.6** | **LangGraph-Loop** (USE execution_role, Checkpointing) | triviale Task→PASS; unmögliche→STOP@MAX mit Report |
 | **1.7** | **End-to-end als Job-Service** | echter Lauf auf 1 Task, State in Tabellen/Stage, resümierbar |
 
-**Querschnitt (parallel/später):** Row Access Policies (Multi-Tenant
-`TENANT_ID`+`USER_ID`), PAT-Lifecycle + Least-Privilege statt ACCOUNTADMIN.
+**Querschnitt (parallel/später):** Account-Objekt-Tagging + Kollisions-Exception,
+no-DROP-Pipeline-Rolle, Versionierung + Cleanup-Report/-Script (siehe
+„Multi-Tenancy & Sicherheit"), PAT-Lifecycle + Least-Privilege statt
+ACCOUNTADMIN. (Kein RAP — Tenant = Datenbank.)
 
 ---
 
