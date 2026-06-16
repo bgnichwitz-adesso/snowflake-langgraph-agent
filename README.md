@@ -105,6 +105,22 @@ Each script prints **PASS** with evidence (version, status, query result) or
 
 ---
 
+## Health check
+
+One config-driven script verifies the whole deployment and prints **OK / NOT OK**
+per check plus an overall result (exit 0 = all good). Nothing to adapt per
+account; run it anytime to confirm the stack is healthy.
+
+```bash
+python scripts/healthcheck.py        # checks connection, infra, image,
+                                     # control-plane, and a container e2e run
+```
+It runs a job-service end-to-end (SPCS → internal OAuth → Cortex → LangGraph
+flow), then **drops its test job and suspends the compute pool** — so it never
+leaves anything running that would block auto-suspend.
+
+---
+
 ## Cleanup (stop billing)
 
 The compute pool bills while a **service** runs. Job-services exit on their own
