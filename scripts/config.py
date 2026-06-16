@@ -35,11 +35,17 @@ def _get(key: str, default: str) -> str:
 
 # --- Snowflake connection / objects ---
 CONNECTION = _get("SF_CONNECTION", "ADESSO_AWS_DE")
-DATABASE = _get("SF_DATABASE", "PREPSMART")
-SCHEMA = _get("SF_SCHEMA", "ORCHESTRATOR")
-POOL = _get("SF_POOL", "PREPSMART_POOL_XS")
+DATABASE = _get("SF_DATABASE", "ORCHESTRATOR")
+SCHEMA = _get("SF_SCHEMA", "CORE")
+POOL = _get("SF_POOL", "ORCH_POOL_XS")
 WAREHOUSE = _get("SF_WAREHOUSE", "DEFAULT_WH")
 INSTANCE_FAMILY = _get("SF_INSTANCE_FAMILY", "CPU_X64_XS")
+
+# --- Roles (deterministic-orchestrator RBAC) ---
+ROLE_PREFIX = _get("SF_ROLE_PREFIX", "ORCH")
+ROLE_SUFFIXES = ["LEAD", "DEVELOPER", "TESTER", "RUNNER", "HUMAN_IN_LOOP"]
+ROLES = [f"{ROLE_PREFIX}_{s}" for s in ROLE_SUFFIXES]
+LEAD_ROLE = f"{ROLE_PREFIX}_LEAD"  # the only role with INSERT on TASK_SPECS
 
 # --- Image repository / image ---
 IMAGE_REPO = _get("SF_IMAGE_REPO", "IMAGES")

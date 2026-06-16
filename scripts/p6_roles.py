@@ -1,8 +1,8 @@
 """Package 6 — roles, append-only TASK_SPECS table, grants, and current view.
 
-Creates the 5 PREPSMART_* roles, an append-only TASK_SPECS table (carrying
-tenant_id + user_id + status), grants INSERT only to PREPSMART_LEAD and SELECT
-to the others, and the TASK_SPECS_CURRENT view. Asserts the three pass
+Creates the 5 workflow roles (config.ROLES), an append-only TASK_SPECS table
+(carrying tenant_id + user_id + status), grants INSERT only to the LEAD role and
+SELECT to the others, and the TASK_SPECS_CURRENT view. Asserts the three pass
 conditions and prints evidence.
 """
 import sys
@@ -15,14 +15,8 @@ SCHEMA = config.SCHEMA
 FQT = f"{DB}.{SCHEMA}.TASK_SPECS"
 FQV = f"{DB}.{SCHEMA}.TASK_SPECS_CURRENT"
 
-ROLES = [
-    "PREPSMART_LEAD",
-    "PREPSMART_DEVELOPER",
-    "PREPSMART_TESTER",
-    "PREPSMART_ORCHESTRATOR",
-    "PREPSMART_HUMAN_IN_LOOP",
-]
-SELECT_ROLES = ROLES[1:]  # everyone except LEAD
+ROLES = config.ROLES
+SELECT_ROLES = [r for r in ROLES if r != config.LEAD_ROLE]  # everyone except LEAD
 
 DDL = [
     *[f"CREATE ROLE IF NOT EXISTS {r}" for r in ROLES],
@@ -49,7 +43,7 @@ GRANTS = []
 for r in ROLES:
     GRANTS.append(f"GRANT USAGE ON DATABASE {DB} TO ROLE {r}")
     GRANTS.append(f"GRANT USAGE ON SCHEMA {DB}.{SCHEMA} TO ROLE {r}")
-GRANTS.append(f"GRANT INSERT ON TABLE {FQT} TO ROLE PREPSMART_LEAD")
+GRANTS.append(f"GRANT INSERT ON TABLE {FQT} TO ROLE {config.LEAD_ROLE}")
 for r in SELECT_ROLES:
     GRANTS.append(f"GRANT SELECT ON TABLE {FQT} TO ROLE {r}")
     GRANTS.append(f"GRANT SELECT ON VIEW {FQV} TO ROLE {r}")
@@ -64,8 +58,8 @@ def main() -> int:
             print(f"OK: executed {len(DDL)} DDL + {len(GRANTS)} grant statements")
 
             # --- Test 1: 5 roles ---
-            print("\n=== SHOW ROLES LIKE 'PREPSMART_%' ===")
-            cur.execute("SHOW ROLES LIKE 'PREPSMART_%'")
+            print(f"\n=== SHOW ROLES LIKE '{config.ROLE_PREFIX}_%' ===")
+            cur.execute(f"SHOW ROLES LIKE '{config.ROLE_PREFIX}_%'")
             cols = [c[0].lower() for c in cur.description]
             found = []
             for row in cur.fetchall():
@@ -88,7 +82,7 @@ def main() -> int:
                     insert_grantees.append(grantee)
                 if priv == "SELECT":
                     select_grantees.append(grantee)
-            t2 = insert_grantees == ["PREPSMART_LEAD"] and sorted(
+            t2 = insert_grantees == [config.LEAD_ROLE] and sorted(
                 select_grantees
             ) == sorted(SELECT_ROLES)
             print(
