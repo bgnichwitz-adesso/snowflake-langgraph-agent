@@ -7,6 +7,11 @@
 Goal of Phase 0: a runnable orchestrator base — a LangGraph flow inside an SPCS
 container reaching Claude via Cortex over the internal path. Achieved.
 
+> **Note (2026-06-16):** the PREPSMART-flavored object names below are historical.
+> In Phase 1 / Paket 1.0 they were renamed to neutral names (DB `ORCHESTRATOR`,
+> schema `CORE`, pool `ORCH_POOL_XS`, roles `ORCH_*`) and the old PREPSMART
+> objects dropped. See `docs/SESSION_PROTOCOL_2026-06-15.md`.
+
 ---
 
 ## Environment as built

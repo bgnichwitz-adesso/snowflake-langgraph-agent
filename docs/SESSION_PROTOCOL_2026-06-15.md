@@ -28,14 +28,14 @@ what was decided, and where to continue — **without re-running Phase 0**.
 4. **Repo split** — orchestrator files only; training files preserved locally.
 
 ## Snowflake objects that exist (account AWS_DE / ADESSO-AWS_DE)
-- DB `PREPSMART`, schema `ORCHESTRATOR`
-- Compute pool `PREPSMART_POOL_XS` (CPU_X64_XS, auto-suspend 600s) — SUSPENDED
-- Image repo `PREPSMART.ORCHESTRATOR.IMAGES`; image `orchestrator_base`
-  (tags pushed: phase0, p3, p4, p5, latest)
-- 5 roles `PREPSMART_*`; table `TASK_SPECS` (INSERT→LEAD only); view
-  `TASK_SPECS_CURRENT`
-- Note: object names are PrepSmart-flavored but `.env`-overridable. Generalizing
-  them is an optional Phase 1 cleanup.
+> Renamed in Phase 1 / Paket 1.0 (2026-06-16): the PrepSmart-flavored names below
+> were migrated to neutral names and the old PREPSMART objects dropped.
+- DB `ORCHESTRATOR`, schema `CORE`
+- Compute pool `ORCH_POOL_XS` (CPU_X64_XS, auto-suspend 600s) — SUSPENDED
+- Image repo `ORCHESTRATOR.CORE.IMAGES`; image `orchestrator_base` (tag: latest)
+- 5 roles `ORCH_*` (LEAD/DEVELOPER/TESTER/RUNNER/HUMAN_IN_LOOP); tables
+  `TASK_SPECS` (+project_id, INSERT→LEAD only) + `PROJECTS`; view `TASK_SPECS_CURRENT`
+- Old PREPSMART DB / `PREPSMART_*` roles / `PREPSMART_POOL_XS` — dropped (were empty).
 
 ## Key decisions (rationale in phase0_report.md / arch spec)
 - **Cortex via SQL `SNOWFLAKE.CORTEX.COMPLETE`** over the connector, NOT the

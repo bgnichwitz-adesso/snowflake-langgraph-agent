@@ -14,14 +14,29 @@ DB = config.DATABASE
 SCHEMA = config.SCHEMA
 FQT = f"{DB}.{SCHEMA}.TASK_SPECS"
 FQV = f"{DB}.{SCHEMA}.TASK_SPECS_CURRENT"
+FQP = f"{DB}.{SCHEMA}.PROJECTS"
 
 ROLES = config.ROLES
 SELECT_ROLES = [r for r in ROLES if r != config.LEAD_ROLE]  # everyone except LEAD
 
 DDL = [
     *[f"CREATE ROLE IF NOT EXISTS {r}" for r in ROLES],
+    # Project registry (control plane): which project, its execution role + where.
+    f"""CREATE TABLE IF NOT EXISTS {FQP} (
+        project_id        STRING        NOT NULL,
+        description       STRING,
+        execution_role    STRING,
+        project_database  STRING,
+        project_schema    STRING,
+        artifact_schema   STRING,
+        code_stage        STRING,
+        status            STRING        NOT NULL DEFAULT 'ACTIVE',
+        created_at        TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+        created_by        STRING        NOT NULL DEFAULT CURRENT_USER()
+    )""",
     f"""CREATE TABLE IF NOT EXISTS {FQT} (
         task_id     STRING        NOT NULL,
+        project_id  STRING,
         tenant_id   STRING        NOT NULL DEFAULT 'DEFAULT',
         user_id     STRING        NOT NULL,
         status      STRING        NOT NULL DEFAULT 'DRAFT',
@@ -44,9 +59,11 @@ for r in ROLES:
     GRANTS.append(f"GRANT USAGE ON DATABASE {DB} TO ROLE {r}")
     GRANTS.append(f"GRANT USAGE ON SCHEMA {DB}.{SCHEMA} TO ROLE {r}")
 GRANTS.append(f"GRANT INSERT ON TABLE {FQT} TO ROLE {config.LEAD_ROLE}")
+GRANTS.append(f"GRANT INSERT ON TABLE {FQP} TO ROLE {config.LEAD_ROLE}")
 for r in SELECT_ROLES:
     GRANTS.append(f"GRANT SELECT ON TABLE {FQT} TO ROLE {r}")
     GRANTS.append(f"GRANT SELECT ON VIEW {FQV} TO ROLE {r}")
+    GRANTS.append(f"GRANT SELECT ON TABLE {FQP} TO ROLE {r}")
 
 
 def main() -> int:
