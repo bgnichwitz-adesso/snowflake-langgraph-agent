@@ -2,3 +2,6 @@
 # langgraph is the MIT library only — NOT langgraph-api / langgraph-cli.
 snowflake-connector-python==4.6.0
 langgraph==1.2.5
+# test gate (Paket 1.5)
+pytest==8.4.2
+ruff==0.14.4
