@@ -98,11 +98,11 @@ def load_task() -> None:
         (project_id,),
     )
     execution_role, artifact_schema = cur.fetchone()
-    # NOTE (Paket 1.6b): the loop will run under the project execution role once
-    # the service is created/owned by ORCH_RUNNER→ORCH_PROJ_<ID> (needs pool/
-    # image/stage + create-service grants). For 1.6 we run as the service owner
-    # to prove the loop mechanics; role-scoping is its own package.
-    # cur.execute(f"USE ROLE {execution_role}")
+    # The job-service is created/owned by the project execution role (Paket
+    # 1.6b), so the container session already runs as it — no USE ROLE needed.
+    cur.execute("SELECT CURRENT_ROLE()")
+    current_role = cur.fetchone()[0]
+    print(f"running as role: {current_role} (expected {execution_role})", flush=True)
 
     Ctx.conn = conn
     Ctx.artifact_schema = artifact_schema

@@ -123,9 +123,17 @@ def main() -> int:
                 f"GRANT INSERT, SELECT ON TABLE {art}.DEV_COMMENTS TO ROLE {role}",
                 f"GRANT INSERT, SELECT ON TABLE {art}.TEST_RESULTS TO ROLE {role}",
                 f"GRANT INSERT, SELECT ON TABLE {art}.RUNS TO ROLE {role}",
-                # read the task control-plane
+                # read the task control-plane (table + current view + registry)
                 f"GRANT USAGE ON SCHEMA {config.DATABASE}.{config.SCHEMA} TO ROLE {role}",
                 f"GRANT SELECT ON TABLE {config.DATABASE}.{config.SCHEMA}.TASK_SPECS TO ROLE {role}",
+                f"GRANT SELECT ON VIEW {config.DATABASE}.{config.SCHEMA}.TASK_SPECS_CURRENT TO ROLE {role}",
+                f"GRANT SELECT ON TABLE {config.DATABASE}.{config.SCHEMA}.PROJECTS TO ROLE {role}",
+                # service-execution (Paket 1.6b): run the loop job under this role
+                f"GRANT USAGE ON WAREHOUSE {config.WAREHOUSE} TO ROLE {role}",
+                f"GRANT USAGE ON COMPUTE POOL {config.POOL} TO ROLE {role}",
+                f"GRANT READ ON IMAGE REPOSITORY "
+                f"{config.DATABASE}.{config.SCHEMA}.{config.IMAGE_REPO} TO ROLE {role}",
+                f"GRANT CREATE SERVICE ON SCHEMA {art} TO ROLE {role}",
                 # guest access on the existing project DB (baseline; refine per project)
                 f"GRANT USAGE ON DATABASE {proj_db} TO ROLE {role}",
                 f"GRANT USAGE ON SCHEMA {proj_db}.{proj_schema} TO ROLE {role}",
