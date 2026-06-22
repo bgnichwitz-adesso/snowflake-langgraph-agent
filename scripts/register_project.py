@@ -100,6 +100,16 @@ def main() -> int:
                     created_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
                     created_by STRING NOT NULL DEFAULT CURRENT_USER()
                 )""",
+                # Orchestrator run outcomes (append-only). TASK_SPECS stays the
+                # LEAD-owned immutable input; RUNS is "what happened".
+                f"""CREATE TABLE IF NOT EXISTS {art}.RUNS (
+                    task_id    STRING NOT NULL,
+                    iteration  INTEGER,
+                    status     STRING,
+                    detail     STRING,
+                    created_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+                    created_by STRING NOT NULL DEFAULT CURRENT_USER()
+                )""",
             ]
             for stmt in ddl:
                 cur.execute(stmt)
@@ -112,6 +122,7 @@ def main() -> int:
                 f"GRANT READ, WRITE ON STAGE {stage} TO ROLE {role}",
                 f"GRANT INSERT, SELECT ON TABLE {art}.DEV_COMMENTS TO ROLE {role}",
                 f"GRANT INSERT, SELECT ON TABLE {art}.TEST_RESULTS TO ROLE {role}",
+                f"GRANT INSERT, SELECT ON TABLE {art}.RUNS TO ROLE {role}",
                 # read the task control-plane
                 f"GRANT USAGE ON SCHEMA {config.DATABASE}.{config.SCHEMA} TO ROLE {role}",
                 f"GRANT SELECT ON TABLE {config.DATABASE}.{config.SCHEMA}.TASK_SPECS TO ROLE {role}",
@@ -119,6 +130,8 @@ def main() -> int:
                 f"GRANT USAGE ON DATABASE {proj_db} TO ROLE {role}",
                 f"GRANT USAGE ON SCHEMA {proj_db}.{proj_schema} TO ROLE {role}",
                 f"GRANT SELECT ON ALL TABLES IN SCHEMA {proj_db}.{proj_schema} TO ROLE {role}",
+                # allow the role to call Cortex (the loop generates under it)
+                f"GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE {role}",
                 # let the runner assume this project role
                 f"GRANT ROLE {role} TO ROLE {config.RUNNER_ROLE}",
             ]
@@ -164,7 +177,7 @@ def main() -> int:
 
             ok = (
                 bool(to_runner)
-                and {"DEV_COMMENTS", "TEST_RESULTS"} <= tabs
+                and {"DEV_COMMENTS", "TEST_RESULTS", "RUNS"} <= tabs
                 and "CODE_STAGE" in stages
             )
             print(f"\n{'PASS — project ' + pid + ' registered' if ok else 'FAIL'}")
