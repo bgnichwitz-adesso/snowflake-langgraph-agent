@@ -93,8 +93,35 @@ load_task (LOCKED, + PROJECTS-Lookup, USE ROLE execution_role)
        └─ fail → TEST_RESULTS-Feedback → claude_generate (loop)
                   └─ iterationen ≥ MAX → STOP + Report
 ```
-LangGraph-Checkpointing auf Stage → resümierbar. Gate = einzige Wahrheit
-(Exit-Code), kein LLM-Urteil.
+Gate = einzige Wahrheit (Exit-Code), kein LLM-Urteil.
+
+> **PIVOT 2026-06-30 — `claude_generate` ist nicht mehr ein One-Shot.** Der Worker
+> wird ein **agentischer Worker** (Cortex Code Agent SDK): er schreibt/führt aus/
+> iteriert innerhalb eines Tasks und gibt ein **schema-validiertes Artefakt**
+> (`output_format`) zurück. Der äußere Loop + das deterministische Gate bleiben
+> unverändert. Der One-Shot `COMPLETE` rät und wird über Iterationen oft schlechter.
+> Details + Migration: `../docs/superpowers/specs/2026-06-28-agentic-worker-migration-design.md`.
+>
+> **Resümierbarkeit (vormals 1.7) verworfen:** Recovery ist *task-granular* über die
+> append-only Spur (Tasks mit terminaler `RUNS`-Zeile überspringen, den in-flight Task
+> neu fahren) — **kein** per-Iterations-Checkpointing.
+
+### Vertrags-Anforderungen an die SPEC (elementar)
+Der LEAD-Akzeptanzvertrag muss pro Artefakt eine **Verifikationsfläche** definieren,
+sonst ist er nicht admissibel (siehe `Phase2_Spec_Admission.md`):
+1. **Benannte Objekte (Identifier-Regel):** jede FQN ist vorab gewählt → in den Vertrag.
+   Für laufzeit-abgeleitete Attribute (Klasse B, z. B. Service-Ingress-URL) gibt der
+   Vertrag die **Auflösungs-Query** (`SHOW ENDPOINTS`/`DESCRIBE`) statt eines fixen Werts.
+2. **Smoke- + Funktionstests:** Smoke = Infrastruktur *steht*; Funktion = sie *arbeitet
+   richtig*. „Baue eine App" allein ist unzulässig.
+3. **Build vs. Promotion:** DEVELOPER baut projekt-scoped autonom; Account-Infra +
+   Security-Klasse + externe Grants sind **human-gated** (siehe
+   `Governance_Who_May_Do_What.md`).
+
+### Gate-Verallgemeinerung
+`run_tests` testet ein **Artefakt** (Datei-Baum **und/oder** deployte Objekte), nicht
+eine `solution.py`: held-out Tests **außerhalb** der Agenten-Reichweite halten, **nur**
+frozen Tests werten, und SQL-Assertions gegen Deployments unterstützen.
 
 ---
 
@@ -110,8 +137,13 @@ LangGraph-Checkpointing auf Stage → resümierbar. Gate = einzige Wahrheit
 | **1.5 ✅** | **Test-Runner + Gate** (`app/test_runner.py` + `app/gate.py`): Code vom gemounteten Stage, pytest, Exit-Code+Log → `TEST_RESULTS`; Gate entscheidet nur über Exit-Code | ✅ task-pass→PASS (exit 0), task-fail→FAIL (exit 1); pytest+ruff im Image |
 | **1.6 ✅** | **LangGraph-Loop** (`app/orchestrator.py`, EIN Container): load_task (+PROJECTS) → generate (cortex) → write Code+Tests auf Stage → run_tests → gate → [PASS:RUNS=DONE \| FAIL:DEV_COMMENTS-Feedback→generate], MAX_ITER (.env, Default 10) → STOP + Report (RUNS=`NEEDS_HUMAN`). Held-out-Tests: sichtbar im Prompt, held-out nur fürs Gate. Tests **fix vorgegeben** (simuliert TESTER). `RUNS`-Tabelle = Lauf-Ergebnis (TASK_SPECS bleibt LEAD-immutable). | ✅ task-add→DONE@iter0; task-impossible→NEEDS_HUMAN@3 (held-out fing return 4); append-only Spur |
 | **1.6b ✅** | **Rollen-Scoping** (least-privilege): Launch-Kette User→`ORCH_RUNNER`→`ORCH_PROJ_<ID>`→EXECUTE JOB SERVICE (Owner=PROJ, Job im Artefakt-Schema). `register_project` grantet PROJ: USAGE Pool+Warehouse, READ Image-Repo, CREATE SERVICE, SELECT view+PROJECTS. Kein ACCOUNTADMIN mehr. | ✅ `running as role: ORCH_PROJ_DEMO` im Log, RUNS=DONE (`scripts/p16b_role_scoping.py`) |
-| **1.7** | **End-to-end als Job-Service** | echter Lauf auf 1 Task, State in Tabellen/Stage, resümierbar |
-| **1.8** | **TESTER-Generierungsschritt** (Separation of Duties): `ORCH_TESTER` leitet aus dem LEAD-Akzeptanzvertrag Tests ab, friert sie ein (DEV read-only), inkl. held-out. | aus Spec generierte, eingefrorene Tests; DEVELOPER kann sie nicht ändern |
+| **1.7** | ~~End-to-end als Job-Service + Checkpointing~~ **VERWORFEN** (2026-06-30) | Resümierbarkeit ist task-granular über die append-only Spur; kein Checkpointing. e2e lief de facto schon in 1.6b. |
+| **1.7′ (Rebuild)** | **Agentischer Worker** (Cortex Code Agent SDK) ersetzt den One-Shot in `generate`; `output_format`-Artefakt; Gate-Verallgemeinerung. Migration M1–M6. | hello-world in SPCS (kein EAI) → e2e-Loop mit Agent → least-priv mit Dual-Identität |
+| **1.8** | **TESTER-Generierungsschritt** (Separation of Duties): `ORCH_TESTER` leitet aus dem LEAD-Akzeptanzvertrag Tests ab, friert sie ein (DEV read-only), inkl. held-out. **Tabellen-Lücke:** eigene `TEST_SPECS`-Tabelle (TESTER INSERT, DEV SELECT) fehlt noch in der RBAC-Matrix. | aus Spec generierte, eingefrorene Tests; DEVELOPER kann sie nicht ändern |
+
+**Vorgelagert/nachgelagert:** Phase 2 (SPEC-Admission/Judge, `Phase2_Spec_Admission.md`)
+läuft **vor** dem Nachtlauf; Phase 3 (Deployment-Repo, `Phase3_Deployment.md`) ist das
+Deliverable. Berechtigungen: `Governance_Who_May_Do_What.md`.
 
 **Querschnitt (parallel/später):** Account-Objekt-Tagging + Kollisions-Exception,
 no-DROP-Pipeline-Rolle, Versionierung + Cleanup-Report/-Script (siehe
