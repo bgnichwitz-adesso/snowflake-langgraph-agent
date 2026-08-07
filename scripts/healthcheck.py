@@ -59,8 +59,12 @@ def check_image(cur) -> str:
 
 
 def check_control_plane(cur) -> str:
-    roles = sorted(r["name"] for r in _rows(cur, f"SHOW ROLES LIKE '{config.ROLE_PREFIX}_%'"))
-    assert sorted(config.ROLES) == roles, f"roles mismatch: {roles}"
+    roles = {r["name"] for r in _rows(cur, f"SHOW ROLES LIKE '{config.ROLE_PREFIX}_%'")}
+    # The 5 workflow roles must exist; per-project ORCH_PROJ_<ID> roles are
+    # dynamic (created by register_project) and are reported, not asserted.
+    missing = set(config.ROLES) - roles
+    assert not missing, f"missing workflow roles: {sorted(missing)}"
+    proj_roles = sorted(r for r in roles if r.startswith(f"{config.ROLE_PREFIX}_PROJ_"))
     grants = _rows(cur, f"SHOW GRANTS ON TABLE {DB}.{SCHEMA}.TASK_SPECS")
     inserts = [g["grantee_name"] for g in grants if g.get("privilege") == "INSERT"]
     assert inserts == [config.LEAD_ROLE], f"INSERT grantees != [{config.LEAD_ROLE}]: {inserts}"
@@ -68,7 +72,8 @@ def check_control_plane(cur) -> str:
     assert {"TASK_SPECS", "PROJECTS"} <= tables, f"tables missing: {tables}"
     views = {v["name"] for v in _rows(cur, f"SHOW VIEWS IN SCHEMA {DB}.{SCHEMA}")}
     assert "TASK_SPECS_CURRENT" in views, "view TASK_SPECS_CURRENT missing"
-    return f"{len(roles)} roles, INSERT→{config.LEAD_ROLE}, TASK_SPECS+PROJECTS+view ok"
+    return (f"{len(config.ROLES)} workflow roles ok, INSERT→{config.LEAD_ROLE}, "
+            f"TASK_SPECS+PROJECTS+view ok; project roles: {proj_roles or 'none'}")
 
 
 def check_container_e2e(cur, tag: str) -> str:
