@@ -85,13 +85,16 @@ und arbeitet scoped. Deterministisch, keine Rätsel.
 
 ### Loop
 ```
-load_task (LOCKED, + PROJECTS-Lookup, USE ROLE execution_role)
-  → claude_generate (Cortex, schreibt Code → CODE_STAGE, Begründung → DEV_COMMENTS)
-  → run_tests (Container holt Code vom Stage, pytest/ruff, Exit-Code+Log → TEST_RESULTS)
+load_task (LOCKED, + PROJECTS-Lookup; Job läuft als ORCH_PROJ_<ID>, 1.6b)
+  → DEVELOPER-Node = agentischer Worker (Cortex Code SDK):
+       schreibt/führt aus/iteriert im Task-cwd (= gemountetes CODE_STAGE),
+       liefert schema-validiertes Artefakt; Zusammenfassung+usage → DEV_COMMENTS
+  → run_tests (frozen Gate: frozen Tests über den Artefakt-Baum, pytest,
+       Exit-Code+Log → TEST_RESULTS)
   → [gate: liest NUR Exit-Code aus TEST_RESULTS]
-       ├─ pass → Status done → next_task
-       └─ fail → TEST_RESULTS-Feedback → claude_generate (loop)
-                  └─ iterationen ≥ MAX → STOP + Report
+       ├─ pass → RUNS=DONE → next_task
+       └─ fail → TEST_RESULTS-Feedback → DEVELOPER-Node (loop)
+                  └─ iterationen ≥ MAX → STOP + Report (RUNS=NEEDS_HUMAN)
 ```
 Gate = einzige Wahrheit (Exit-Code), kein LLM-Urteil.
 

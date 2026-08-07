@@ -94,7 +94,11 @@ QUALIFY ROW_NUMBER() OVER (
 - `HUMAN_IN_LOOP` — Oversight. Liest Dev-Kommentare (Eskalationskanal) + alle Specs.
 
 ### 7.3 Konsistenz mit dem Multi-Tenant-Modell
-`TASK_SPECS`, `DEV_COMMENTS`, `TEST_RESULTS` tragen `TENANT_ID` + `USER_ID` — Row Access Policies analog zu §4a der Haupt-Spec.
+**Aktualisiert (2026-06-16): Tenant = Datenbank, KEIN RAP.** Isolation läuft über
+getrennte Datenbanken (eine DB = ein Tenant/eine Instanz), nicht über Row Access
+Policies — RAP ist operativ zu teuer (siehe `arch_decisions`-Memory und Phase-1-Spec
+„Multi-Tenancy & Sicherheit"). `TASK_SPECS`/`DEV_COMMENTS`/`TEST_RESULTS` behalten
+`TENANT_ID`+`USER_ID` als Metadaten, aber die Zugriffsgrenze ist die Datenbank.
 
 ## 8. Offene Punkte für die Implementierung heute Abend
 1. SPCS-Setup: Compute Pool, Image-Repo, Job-Service-YAML.

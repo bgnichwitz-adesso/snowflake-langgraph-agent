@@ -71,37 +71,29 @@ connections.toml authenticator — interactive.)
 All commands assume the venv is active: `. .venv/bin/activate`.
 
 ```bash
-# 1 — verify the Snowflake connection
+# 1 — verify the Snowflake connection (optional; healthcheck also covers it)
 python scripts/p1_connect.py
 
-# 2 — create infra (db, schema, compute pool, image repository)
+# 2 — control plane: db, schema, compute pool, image repository
 python scripts/p2_infra.py
+
+# 3 — build + push the orchestrator image
 bash   scripts/registry_login.sh          # log engine in to the registry
-bash   scripts/build_push.sh phase0        # build + push the base image
-python scripts/p2_service.py phase0        # create service, wait for READY
+bash   scripts/build_push.sh latest        # build + push the base image
 
-# 3 — Cortex reachable from inside the container
-bash   scripts/build_push.sh p3
-python scripts/p3_cortex.py p3
-
-# 4 — langgraph present in the image
-python scripts/run_job.py --tag p3 --name LANGGRAPH_CHECK_JOB \
-  --expect "langgraph " -- \
-  python -u -c "import langgraph, importlib.metadata as m; print('langgraph', m.version('langgraph'))"
-
-# 5 — minimal LangGraph flow calling Cortex
-python scripts/run_job.py --tag p3 --name LANGGRAPH_FLOW_JOB \
-  --expect "SYSTEM OK" -- python -u /app/langgraph_flow.py
-
-# 6 — roles, append-only TASK_SPECS, grants, current view
+# 4 — roles, append-only TASK_SPECS + PROJECTS, grants, current view
 python scripts/p6_roles.py
+
+# 5 — register a project (see "Register a project" below)
+python scripts/register_project.py --id DEMO --project-db DEMO_PROJ
+
+# 6 — verify the whole stack end to end (self-suspends)
+python scripts/healthcheck.py
 ```
 
-Each script prints **PASS** with evidence (version, status, query result) or
-**FAIL** with the full error. Stop on any FAIL.
-
-> The image is rebuilt per tag only to keep package boundaries clean; once set
-> up you can use a single tag (e.g. `latest`) for everything from step 3 on.
+Each script prints **PASS**/OK with evidence or **FAIL** with the full error.
+Stop on any FAIL. The historical per-package Phase-0 proof scripts
+(`p2_service`, `p3_cortex`, …) were retired — `healthcheck.py` supersedes them.
 
 ---
 
