@@ -109,6 +109,33 @@ Gate = einzige Wahrheit (Exit-Code), kein LLM-Urteil.
 > append-only Spur (Tasks mit terminaler `RUNS`-Zeile überspringen, den in-flight Task
 > neu fahren) — **kein** per-Iterations-Checkpointing.
 
+### Agentischer Worker — festgelegte Details (2026-06-23)
+Zwei geschachtelte Loops, klar getrennt:
+- **Innerer Loop = der Agent** (im DEVELOPER-Knoten): eine zusammenhängende
+  Cortex-Code-Session mit Tools (schreiben/ausführen/nachbessern) im `cwd` (=
+  gemountetes `CODE_STAGE`). Budget: `max_turns`. Nicht-deterministisch.
+- **Äußerer Loop = LangGraph**: frozen-Gate → PASS/FAIL/Feedback. Budget:
+  `MAX_ITER`. **Einzige „done"-Autorität.** Knoten/Kanten unverändert; nur der
+  *Körper* des DEVELOPER-Knotens wechselt von `COMPLETE` auf den Agent.
+
+**ENTSCHIEDEN — Thread-Resume über Außen-Iterationen: NEIN.** Jede DEVELOPER-Runde
+ist eine **frische, reproduzierbare Agent-Invocation**, geseedet aus durable State:
+Spec + sichtbare Tests + letztes `TEST_RESULTS`-Feedback + die bereits im `cwd`/
+`CODE_STAGE` liegenden Dateien. Der Agent-Thread (opak) lebt nur **innerhalb** einer
+Runde. Grund: die dauerhafte Wahrheit bleibt in den append-only Tabellen + Stage →
+deterministisch + task-granular resümierbar; kein Verlass auf opakes Agent-Memory.
+(Der Vorteil langer Tool-Sessions bleibt **innerhalb** eines Tasks erhalten.)
+
+**ENTSCHIEDEN — `output_format`-Schema des Artefakts** (schema-validiert vom SDK):
+```json
+{ "summary": "was der Agent tat",
+  "entry_point": "relativer Pfad zum Ausführen/Importieren (z. B. solution.py)",
+  "files": ["erstellte/geänderte Dateien, relativ zum cwd"],
+  "ready": true }
+```
+`ready` ist **advisory** (Selbsteinschätzung) — das frozen-Gate entscheidet. `files`
++ `entry_point` sagen `run_tests`, welchen Baum es testet.
+
 ### Vertrags-Anforderungen an die SPEC (elementar)
 Der LEAD-Akzeptanzvertrag muss pro Artefakt eine **Verifikationsfläche** definieren,
 sonst ist er nicht admissibel (siehe `Phase2_Spec_Admission.md`):

@@ -64,7 +64,7 @@ Already verified this session: **egress without EAI** (re-confirm full CLI path 
 
 ## Open design points (resolve in spec review, not now)
 1. **Dual identity / least privilege** — session token (`ORCH_PROJ_<ID>`) vs PAT role; scope + coexistence.
-2. **Multi-file artifact** — frozen tests vs agent files layout; what `output_format` schema declares (e.g. `{summary, entry_point, ready}`).
+2. ✅ **Multi-file artifact / `output_format`** — RESOLVED 2026-06-23 (see `spec/Phase1_Orchestrator_Loop.md` → "Agentischer Worker — festgelegte Details"): schema `{summary, entry_point, files[], ready}`; **no thread-resume across outer iterations** (fresh agent invocation seeded from durable state each round).
 3. **Observability** — measure whether SDK-headless auto-logs to `AI_OBSERVABILITY_EVENTS`; else our own append-only tables.
 4. **Security** — agent runs arbitrary bash (`bypassPermissions`) inside the container; bounded by container grants.
 5. **Image size / pool start** — ~210 MB CLI tree.
