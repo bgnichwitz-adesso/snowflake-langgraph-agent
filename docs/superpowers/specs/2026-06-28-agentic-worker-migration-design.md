@@ -54,7 +54,7 @@ Already verified this session: **egress without EAI** (re-confirm full CLI path 
 
 ## Migration sequence (gated, each a commit/rollback point)
 - **M0 ✅ (done):** egress proven (no EAI); laptop SDK spike builds+runs hello-world.
-- **M1:** build agent-SDK image (Dockerfile+requirements+entrypoint); job proves `cortex --version` + `import cortex_code_agent_sdk` in-container.
+- **M1 ✅ (done 2026-06-23):** agent-SDK image built. `docker/requirements.txt` +`cortex-code-agent-sdk==1.0.2`; `docker/Dockerfile` installs the `cortex` CLI at build time via `curl -LsS https://ai.snowflake.com/static/cc-scripts/install.sh | sh` (+curl/ca-certs, then purged) and sets `PATH`/`CORTEX_CODE_CLI_PATH`. New `app/agent_smoke.py` + healthcheck `cortex_cli` check. Proven in-container (no EAI, no auth): `Cortex Code v1.1.66` + SDK import + `AGENT_SMOKE_OK`; healthcheck 6/6; langgraph_flow still green. (Entrypoint/PAT deferred to M2, as reviewed.)
 - **M2:** **container hello-world** — SDK builds `hello.py` in SPCS, returns `ResultMessage`, no EAI. *(the stated goal of this test track)*
 - **M3:** `app/agent_worker.py` with `output_format`; wire into `generate()`.
 - **M4:** re-verify 1.4 + 1.5 with agent artifacts.

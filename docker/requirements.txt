@@ -5,3 +5,5 @@ langgraph==1.2.5
 # test gate (Paket 1.5)
 pytest==8.4.2
 ruff==0.14.4
+# agentic worker (M1): pure-python SDK; spawns the separately-installed cortex CLI
+cortex-code-agent-sdk==1.0.2

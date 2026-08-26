@@ -12,6 +12,8 @@ Checks (all names come from .env / config):
                         PROJECTS, and TASK_SPECS_CURRENT exist
   5. container_e2e   — a job-service runs the LangGraph flow inside the
                         container (covers SPCS, internal OAuth, Cortex, langgraph)
+  6. cortex_cli      — a job-service proves the Cortex Code CLI + SDK are present
+                        and runnable in the image (agentic worker prerequisite)
 
 Leaves the compute pool suspended (zero cost) and drops its own test job.
 
@@ -24,6 +26,7 @@ from sf import connect
 
 DB, SCHEMA, POOL = config.DATABASE, config.SCHEMA, config.POOL
 JOB = f"{DB}.{SCHEMA}.HEALTHCHECK_JOB"
+JOB_CLI = f"{DB}.{SCHEMA}.HEALTHCHECK_CLI_JOB"
 
 
 def _rows(cur, sql):
@@ -99,13 +102,37 @@ spec:
     return "container ran flow → Cortex → 'SYSTEM OK'"
 
 
+def check_cortex_cli(cur, tag: str) -> str:
+    """M1 regression: the Cortex Code CLI + SDK are present/runnable in the image."""
+    spec = f"""
+spec:
+  containers:
+    - name: main
+      image: {config.spec_image_path(tag)}
+      command: ["python", "-u", "/app/agent_smoke.py"]
+"""
+    cur.execute(f"DROP SERVICE IF EXISTS {JOB_CLI}")
+    try:
+        cur.execute(f"EXECUTE JOB SERVICE IN COMPUTE POOL {POOL} NAME = {JOB_CLI} "
+                    f"FROM SPECIFICATION $${spec}$$")
+    except Exception as exc:  # noqa: BLE001 - inspect logs regardless
+        raise AssertionError(f"job failed: {str(exc)[:160]}") from None
+    cur.execute(f"SELECT SYSTEM$GET_SERVICE_LOGS('{JOB_CLI}', '0', 'main', 1000)")
+    logs = cur.fetchone()[0] or ""
+    assert "AGENT_SMOKE_OK" in logs and "Cortex Code" in logs, \
+        f"CLI/SDK smoke failed; logs: {logs[:200]}"
+    return "container: cortex CLI + SDK present (AGENT_SMOKE_OK)"
+
+
 CHECKS = [
     ("connection", check_connection),
     ("infra", check_infra),
     ("image", check_image),
     ("control_plane", check_control_plane),
     ("container_e2e", check_container_e2e),
+    ("cortex_cli", check_cortex_cli),
 ]
+TAG_CHECKS = {"container_e2e", "cortex_cli"}  # checks that take the image tag
 
 
 def main() -> int:
@@ -116,7 +143,7 @@ def main() -> int:
             cur = conn.cursor()
             for name, fn in CHECKS:
                 try:
-                    detail = fn(cur, tag) if name == "container_e2e" else fn(cur)
+                    detail = fn(cur, tag) if name in TAG_CHECKS else fn(cur)
                     results.append((name, True, detail))
                     print(f"[  OK   ] {name:14} — {detail}")
                 except Exception as exc:  # noqa: BLE001
@@ -125,6 +152,7 @@ def main() -> int:
             # always clean up
             try:
                 cur.execute(f"DROP SERVICE IF EXISTS {JOB}")
+                cur.execute(f"DROP SERVICE IF EXISTS {JOB_CLI}")
                 cur.execute(f"ALTER COMPUTE POOL {POOL} SUSPEND")
             except Exception as exc:  # noqa: BLE001
                 print(f"(cleanup warning: {exc})")
