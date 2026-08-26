@@ -69,6 +69,12 @@ roles `ORCH_LEAD/_DEVELOPER/_TESTER/_RUNNER/_HUMAN_IN_LOOP` + `ORCH_PROJ_DEMO`;
 fixture `DEMO_PROJ.PUBLIC.SAMPLE_DATA`). Healthcheck 5/5 OK.
 
 ## Forward path
-M1 (agent-SDK image) → M2 (container hello-world, no EAI) → M3 (`agent_worker.py` + wire into `generate`)
+M1 ✅ (agent-SDK image) → M2 (container hello-world, no EAI; PAT/dual-identity) → M3 (`agent_worker.py` + wire into `generate`)
 → M4 (re-verify 1.4/1.5 with agent artifacts) → M5 (e2e loop) → M6 (dual-identity least-priv) →
 1.8 (TESTER generation) → Phase 2 (SPEC admission) → Phase 3 (deployment repo).
+
+## Maintenance rule
+**Regenerate `docs/overview.html` after EVERY completed step** (Paket/M-milestone/consolidation)
+so it always mirrors current state, and commit it with that step. It is the primary
+quick-overview artifact. Serve to Windows from WSL: `.venv/bin/python -m http.server 8000
+--bind 0.0.0.0` in `docs/` → `http://localhost:8000/overview.html`.
