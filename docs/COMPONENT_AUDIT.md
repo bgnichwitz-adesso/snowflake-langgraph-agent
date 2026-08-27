@@ -69,9 +69,12 @@ roles `ORCH_LEAD/_DEVELOPER/_TESTER/_RUNNER/_HUMAN_IN_LOOP` + `ORCH_PROJ_DEMO`;
 fixture `DEMO_PROJ.PUBLIC.SAMPLE_DATA`). Healthcheck 5/5 OK.
 
 ## Forward path
-M1 ✅ (agent-SDK image) → M2 (container hello-world, no EAI; PAT/dual-identity) → M3 (`agent_worker.py` + wire into `generate`)
-→ M4 (re-verify 1.4/1.5 with agent artifacts) → M5 (e2e loop) → M6 (dual-identity least-priv) →
+M1 ✅ (agent-SDK image) → M2 ✅ (container hello-world, internal token, no PAT/EAI; CLI pinned)
+→ **M3 (next: `agent_worker.py` + wire into `generate`)** → M4 (re-verify 1.4/1.5 with agent artifacts)
+→ M5 (e2e loop) → M6 (run under `ORCH_PROJ_<ID>`; PAT/dual-identity dropped) →
 1.8 (TESTER generation) → Phase 2 (SPEC admission) → Phase 3 (deployment repo).
+New: `app/agent_hello.py` (M2 proof) and `app/agent_smoke.py` (M1 proof) exist; CLI pinned
+to `1.1.66+001753.801adc2b71d7` in the Dockerfile (tarball+sha256, installer bypassed).
 
 ## Maintenance rule
 **Regenerate `docs/overview.html` after EVERY completed step** (Paket/M-milestone/consolidation)

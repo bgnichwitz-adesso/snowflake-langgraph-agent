@@ -65,8 +65,8 @@
 </head>
 <body>
 <header>
-  <h1>Snowflake LangGraph Orchestrator <span class="badge b-ok">Phase 1 Kern läuft · M1 ✅</span></h1>
-  <div class="sub">Deterministischer, tabellengetriebener Code-Orchestrator auf Snowflake&nbsp;SPCS · Claude via Cortex, intern (kein Egress) · <code>main</code>&nbsp;@&nbsp;<code>16a1eae</code></div>
+  <h1>Snowflake LangGraph Orchestrator <span class="badge b-ok">M2 ✅ — Agent läuft in SPCS</span></h1>
+  <div class="sub">Deterministischer, tabellengetriebener Code-Orchestrator auf Snowflake&nbsp;SPCS · Claude via Cortex, intern (kein Egress) · <code>main</code>&nbsp;@&nbsp;<code>df7ccb8</code></div>
   <nav>
     <a href="#status">Status</a><a href="#loop">Loop</a><a href="#arch">Architektur</a>
     <a href="#components">Komponenten</a><a href="#roadmap">Roadmap</a>
@@ -80,8 +80,8 @@
     <div class="grid tiles">
       <div class="tile"><div class="k">Phase 0 — Bootstrap</div><div class="v">✅ abgeschlossen</div></div>
       <div class="tile"><div class="k">Phase 1 — Loop-Kern (1.0–1.6b)</div><div class="v">✅ läuft (Healthcheck 6/6)</div></div>
-      <div class="tile"><div class="k">Agentic-Worker-Umbau (M-Serie)</div><div class="v">🟠 M1 ✅ · M2 als Nächstes</div></div>
-      <div class="tile"><div class="k">Nächster Schritt</div><div class="v">M2 — Container-Hello-World (Agent läuft)</div></div>
+      <div class="tile"><div class="k">Agentic-Worker-Umbau (M-Serie)</div><div class="v">🟠 M1 ✅ · M2 ✅ · M3 als Nächstes</div></div>
+      <div class="tile"><div class="k">Nächster Schritt</div><div class="v">M3 — agent_worker.py in generate() verdrahten</div></div>
       <div class="tile"><div class="k">Kosten gerade</div><div class="v">0 (Pool suspended)</div></div>
     </div>
     <div class="panel" style="margin-top:12px">
@@ -90,8 +90,11 @@
       <b>agentischen Worker (Cortex Code Agent SDK)</b> — der äußere deterministische Loop und
       das frozen-test Gate bleiben unverändert das Herz. <b>1.7 (Checkpointing) wurde verworfen</b>
       (Recovery ist task-granular über die append-only Spur).
-      <div style="margin-top:8px;color:var(--muted);font-size:13px"><b>M1 erledigt:</b> Cortex-CLI + SDK sind im Image und im Container bewiesen (ohne EAI, ohne Auth):
-      <code>Cortex Code v1.1.66</code> + SDK-Import + <code>AGENT_SMOKE_OK</code>.
+      <div style="margin-top:8px;color:var(--muted);font-size:13px"><b>M2 erledigt:</b> der Agent
+      <b>läuft im SPCS-Container</b> (SDK→CLI→<code>agent:run</code> schrieb <code>hello.txt</code>,
+      <code>ResultMessage(success)</code>) — mit dem <b>internen SPCS-OAuth-Token</b> (kein PAT, kein EAI).
+      CLI ist auf <code>v1.1.66</code> <b>gepinnt</b> (reproduzierbar). Damit ist die frühere
+      „Dual-Identität/PAT"-Linie hinfällig (eine interne Identität).
       Quellen: <code>docs/COMPONENT_AUDIT.md</code>, <code>spec/Phase1_Orchestrator_Loop.md</code>, <code>docs/superpowers/specs/2026-06-28-agentic-worker-migration-design.md</code></div>
     </div>
   </section>
@@ -101,7 +104,7 @@
     <div class="flow">
       <div class="node"><b>load_task</b><small>LOCKED aus TASK_SPECS + PROJECTS-Lookup; Job läuft als <code>ORCH_PROJ_&lt;ID&gt;</code></small></div>
       <div class="arrow">→</div>
-      <div class="node" style="border-left:3px solid var(--warn)"><b>DEVELOPER-Node 🟠</b><small>agentischer Worker (Cortex Code SDK): schreibt/führt aus/iteriert im cwd (= gemountetes CODE_STAGE), liefert schema-validiertes Artefakt · <i>Unterbau ab M1 im Image; Verdrahtung folgt M3</i></small></div>
+      <div class="node" style="border-left:3px solid var(--warn)"><b>DEVELOPER-Node 🟠</b><small>agentischer Worker (Cortex Code SDK): schreibt/führt aus/iteriert im cwd, liefert schema-validiertes Artefakt · <i>im Container bewiesen (M2, internes Token, kein EAI); Verdrahtung in <code>generate()</code> = M3</i></small></div>
       <div class="arrow">→</div>
       <div class="node"><b>run_tests</b><small>frozen Tests über den Artefakt-Baum, pytest, Exit-Code+Log → TEST_RESULTS</small></div>
       <div class="arrow">→</div>
@@ -137,17 +140,16 @@
           <tr><td><code>ORCH_DEVELOPER</code></td><td>Agent: baut Artefakte unter <code>ORCH_PROJ_&lt;ID&gt;</code></td></tr>
           <tr><td><code>ORCH_TESTER</code></td><td>Agent: leitet frozen Tests ab (1.8)</td></tr>
           <tr><td><code>ORCH_RUNNER</code></td><td>Deterministischer Loop; nimmt <code>ORCH_PROJ_&lt;ID&gt;</code> an</td></tr>
-          <tr><td><code>ORCH_PROJ_&lt;ID&gt;</code></td><td>Least-priv Ausführungsrolle je Projekt (kein DROP/OR REPLACE)</td></tr>
+          <tr><td><code>ORCH_PROJ_&lt;ID&gt;</code></td><td>Least-priv Ausführungsrolle je Projekt (auch für die CLI — kein PAT)</td></tr>
         </table>
         <p style="font-size:12.5px;color:var(--muted);margin:8px 0 0">Verboten für <b>jeden</b> Agenten (nur HITL, vor dem Lauf): Account-Parameter, Security/Integrations, Network, MANAGE GRANTS, DROP. Referenz: <code>spec/Governance_Who_May_Do_What.md</code></p>
       </div>
     </div>
     <div class="panel" style="margin-top:12px">
-      <h4>Hosting</h4>
-      SPCS <b>Job-Service</b> (run-to-completion) in Compute-Pool <code>ORCH_POOL_XS</code> · Image aus <code>ORCHESTRATOR.CORE.IMAGES</code> ·
-      Cortex-Call intern über OAuth-Token (kein EAI) · CODE_STAGE als Volume gemountet ·
-      <b>bewiesen:</b> Container erreicht den eigenen Account-Endpoint ohne EAI (allg. Internet geblockt) ·
-      <b>M1:</b> Image enthält jetzt die <code>cortex</code>-CLI (~1,2 GB) + SDK.
+      <h4>Hosting &amp; Agent-Auth</h4>
+      SPCS <b>Job-Service</b> in Pool <code>ORCH_POOL_XS</code> · Image aus <code>ORCHESTRATOR.CORE.IMAGES</code> (mit gepinnter <code>cortex</code>-CLI ~1,2 GB + SDK) ·
+      Cortex &amp; Agent-CLI authentifizieren <b>beide über das interne OAuth-Token</b> (<code>/snowflake/session/token</code>, `authenticator=oauth` in einer Runtime-<code>connections.toml</code>) — <b>kein EAI, kein PAT</b>.
+      Offline-Flags (<code>--no-auto-update</code>, <code>COCO_*_DISABLED</code>) halten die CLI beim Account-Host.
     </div>
   </section>
 
@@ -160,10 +162,11 @@
       <tr><td><code>gate.py</code></td><td>PASS/FAIL nur über Exit-Code</td><td><span class="badge b-ok">KEEP</span></td></tr>
       <tr><td><code>test_runner.py</code></td><td>pytest im Container → TEST_RESULTS</td><td><span class="badge b-warn">ADAPT · M4</span></td></tr>
       <tr><td><code>cortex_client.py</code></td><td>One-shot COMPLETE (3-arg)</td><td><span class="badge b-plan">KEEP · Legacy/Fallback</span></td></tr>
+      <tr><td><code>agent_hello.py</code></td><td>M2-Beweis: Agent läuft in SPCS (internes Token)</td><td><span class="badge b-ok">KEEP · NEU (M2)</span></td></tr>
       <tr><td><code>agent_smoke.py</code></td><td>M1-Beweis: CLI+SDK im Container (offline)</td><td><span class="badge b-ok">KEEP · NEU (M1)</span></td></tr>
       <tr><td><code>stage_io.py</code></td><td>Stage-Mount-Verify</td><td><span class="badge b-ok">KEEP</span></td></tr>
       <tr><td><code>langgraph_flow.py</code></td><td>Smoke-PoC (Healthcheck nutzt es)</td><td><span class="badge b-ok">KEEP</span></td></tr>
-      <tr><td><code>agent_worker.py</code></td><td>Agentischer Worker (SDK)</td><td><span class="badge b-plan">NEU · M3</span></td></tr>
+      <tr><td><code>agent_worker.py</code></td><td>Agentischer Worker (SDK, output_format)</td><td><span class="badge b-plan">NEU · M3</span></td></tr>
       <tr class="retired"><td><code>cortex_test.py</code></td><td>Phase-0 Cortex-Smoke</td><td><span class="badge b-retire">RETIRED</span></td></tr>
     </table></div>
     <h3>Scripts · scripts/</h3>
@@ -172,14 +175,14 @@
       <tr><td><code>config.py</code> · <code>sf.py</code></td><td>Zentrale Config (.env) · Snowflake-Connection (PAT)</td><td><span class="badge b-ok">KEEP</span></td></tr>
       <tr><td><code>p2_infra.py</code> · <code>p6_roles.py</code> · <code>register_project.py</code></td><td>Setup: Infra · Rollen/Tabellen · Projekt-Onboarding</td><td><span class="badge b-ok">KEEP</span></td></tr>
       <tr><td><code>build_push.sh</code> · <code>registry_login.sh</code> · <code>image_uri.py</code></td><td>Image-Pipeline</td><td><span class="badge b-ok">KEEP</span></td></tr>
-      <tr><td><code>run_job.py</code></td><td>Generischer SPCS-Job-Runner</td><td><span class="badge b-warn">ADAPT · PAT-env (M2)</span></td></tr>
+      <tr><td><code>run_job.py</code></td><td>Generischer SPCS-Job-Runner</td><td><span class="badge b-ok">KEEP</span></td></tr>
       <tr><td><code>healthcheck.py</code></td><td>End-to-end Check (6/6), self-suspending</td><td><span class="badge b-ok">KEEP · cortex_cli-Check (M1)</span></td></tr>
       <tr><td><code>p14 / p15 / p16 / p16b</code></td><td>Regressions-Proofs (stage / gate / loop / role-scoping)</td><td><span class="badge b-warn">ADAPT · M4–M6</span></td></tr>
       <tr><td><code>p1_connect.py</code></td><td>Connection-Smoke</td><td><span class="badge b-ok">KEEP</span></td></tr>
       <tr class="retired"><td><code>p0_enable_idtoken · p2_service · p3_cortex</code></td><td>Phase-0 Reste</td><td><span class="badge b-retire">RETIRED</span></td></tr>
     </table></div>
     <h3>Docker</h3>
-    <div class="panel"><code>docker/Dockerfile</code> + <code>requirements.txt</code> — <span class="badge b-ok">M1 ✅</span> enthält jetzt <code>cortex-code-agent-sdk==1.0.2</code> + die <code>cortex</code>-CLI (Build-Zeit-Install von <code>ai.snowflake.com</code>). Image groß (~1,2 GB) — Multi-Stage-Optimierung später.</div>
+    <div class="panel"><code>docker/Dockerfile</code> + <code>requirements.txt</code> — <span class="badge b-ok">M1+M2 ✅</span> <code>cortex-code-agent-sdk==1.0.2</code> + die <code>cortex</code>-CLI <b>gepinnt auf 1.1.66</b> (direkter Tarball von <code>sfc-repo</code> + sha256, Installer umgangen → reproduzierbar). Image ~1,2 GB — Multi-Stage-Optimierung später.</div>
   </section>
 
   <section id="roadmap">
@@ -187,13 +190,12 @@
     <div class="panel"><table>
       <tr><th>Stufe</th><th>Inhalt</th><th>Status</th></tr>
       <tr><td>Phase 0</td><td>Bootstrap: Verbindung → SPCS → Cortex → LangGraph → Rollen</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td>1.0–1.2</td><td>Rename/Control-Plane · register_project · Artefakt-Schemas</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td>1.3–1.5</td><td>Cortex-Node · Stage-I/O · Test-Runner+Gate</td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td>1.0–1.5</td><td>Rename/Control-Plane · register_project · Cortex-Node · Stage-I/O · Test-Runner+Gate</td><td><span class="badge b-ok">✅</span></td></tr>
       <tr><td>1.6 / 1.6b</td><td>LangGraph-Loop · least-priv Rollen-Scoping</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td>M0</td><td>Egress ohne EAI bewiesen · SDK-Spike</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td>M1</td><td>Agent-SDK-Image (cortex CLI + SDK im Container bewiesen)</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td><b>M2</b></td><td><b>Container-Hello-World</b> — SDK lässt den Agenten in SPCS laufen (ResultMessage), Auth via PAT (Dual-Identität), weiterhin kein EAI</td><td><span class="badge b-warn">◀ NÄCHSTES</span></td></tr>
-      <tr><td>M3–M6</td><td>agent_worker.py + Verdrahtung → 1.4/1.5 re-verify → e2e-Loop → Dual-Identität least-priv</td><td><span class="badge b-plan">geplant</span></td></tr>
+      <tr><td>M0 / M1</td><td>Egress ohne EAI · Agent-SDK-Image (CLI+SDK, gepinnt)</td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td>M2</td><td>Container-Hello-World — Agent läuft in SPCS, internes Token, kein PAT/EAI</td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td><b>M3</b></td><td><b>agent_worker.py</b> (output_format) + Verdrahtung in <code>orchestrator.py generate()</code></td><td><span class="badge b-warn">◀ NÄCHSTES</span></td></tr>
+      <tr><td>M4–M6</td><td>1.4/1.5 mit Agent-Artefakten re-verify → e2e-Loop → Lauf unter <code>ORCH_PROJ_&lt;ID&gt;</code></td><td><span class="badge b-plan">geplant</span></td></tr>
       <tr><td>1.8</td><td>TESTER-Generierung (Separation of Duties, frozen + held-out)</td><td><span class="badge b-plan">geplant</span></td></tr>
       <tr><td>Phase 2</td><td>SPEC-Admission (Judge advisory + deterministischer Verifier + HITL)</td><td><span class="badge b-plan">Spec fertig</span></td></tr>
       <tr><td>Phase 3</td><td>Deployment = deterministisches GitHub-Repo (idempotent DDL + Manifest + frozen Tests)</td><td><span class="badge b-plan">Spec fertig</span></td></tr>
@@ -204,12 +206,12 @@
     <h2>Tragende Entscheidungen</h2>
     <div class="grid tiles">
       <div class="tile"><div class="v">Determinismus-Gate</div><div class="k">Nur grüner Exit-Code = PASS. Nie „der Agent sagt fertig".</div></div>
-      <div class="tile"><div class="v">Cortex intern, kein EAI</div><div class="k">OAuth-Token aus /snowflake/session/token; Egress zum eigenen Account bewiesen.</div></div>
+      <div class="tile"><div class="v">Cortex &amp; CLI intern, kein EAI</div><div class="k">OAuth-Token aus /snowflake/session/token; Agent-CLI nutzt dasselbe Token (bewiesen M2). Kein PAT.</div></div>
       <div class="tile"><div class="v">Feedback-Loop = Tabellen, nicht GitHub</div><div class="k">Läuft überall; GitHub ist nur Liefer-Artefakt (Phase 3), nie der Loop.</div></div>
       <div class="tile"><div class="v">Tenant = Datenbank</div><div class="k">Isolierte DBs statt RAP (operativ zu teuer). Mehrere Instanzen via .env.</div></div>
       <div class="tile"><div class="v">Append-only + RBAC</div><div class="k">Jede Änderung = neue Zeile; LEAD nur INSERT; keine autonomen DROPs (Versionierung + human-gated Cleanup).</div></div>
-      <div class="tile"><div class="v">Agentischer Worker</div><div class="k">Cortex Code SDK statt One-Shot; Gate bleibt die Autorität. Kein Thread-Resume über Außen-Iterationen.</div></div>
-      <div class="tile"><div class="v">LangGraph MIT only</div><div class="k">Nur die Library; nie langgraph-api/cli (Elastic 2.0).</div></div>
+      <div class="tile"><div class="v">Agentischer Worker (im Container bewiesen)</div><div class="k">Cortex Code SDK statt One-Shot; interne Identität (SPCS-Token). Gate bleibt Autorität; kein Thread-Resume außen.</div></div>
+      <div class="tile"><div class="v">Reproduzierbarkeit</div><div class="k">Gepinnte Deps + gepinnte CLI-Version (Tarball+sha256). Kein „latest"-Drift.</div></div>
       <div class="tile"><div class="v">Governance</div><div class="k">Agents build+test; Humans own the blast radius (Account/Security/Network/DROP = HITL).</div></div>
     </div>
   </section>
@@ -219,7 +221,7 @@
     <div class="panel">
       <span class="pill">DB <code>ORCHESTRATOR.CORE</code></span>
       <span class="pill">Pool <code>ORCH_POOL_XS</code> (suspended)</span>
-      <span class="pill">Image-Repo + <code>orchestrator_base:latest</code> (mit CLI+SDK)</span>
+      <span class="pill">Image-Repo + <code>orchestrator_base:latest</code> (gepinnte CLI 1.1.66 + SDK)</span>
       <span class="pill">5 Workflow-Rollen + <code>ORCH_PROJ_DEMO</code></span>
       <span class="pill">TASK_SPECS · PROJECTS · View</span>
       <span class="pill">Projekt <code>DEMO</code> (DB <code>DEMO_PROJ</code>, Fixture <code>SAMPLE_DATA</code>)</span>
@@ -228,8 +230,8 @@
 
 </main>
 <div class="foot">
-  Generiert aus <code>docs/COMPONENT_AUDIT.md</code>, <code>spec/*</code> und Projekt-Memory · Stand: <code>main</code> @ <code>16a1eae</code> (M1) ·
-  <b>Regel: nach JEDEM Schritt neu generieren</b> (siehe Memory) · statisch &amp; offline öffbar.
+  Generiert aus <code>docs/COMPONENT_AUDIT.md</code>, <code>spec/*</code> und Projekt-Memory · Stand: <code>main</code> @ <code>df7ccb8</code> (M2) ·
+  <b>Regel: nach JEDEM Schritt neu generieren</b> · statisch &amp; offline öffbar.
 </div>
 </body>
 </html>
