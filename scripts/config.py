@@ -69,6 +69,9 @@ IMAGE_NAME = _get("SF_IMAGE_NAME", "orchestrator_base")
 # --- Cortex ---
 CORTEX_MODEL = _get("CORTEX_MODEL", "claude-sonnet-4-6")
 
+# --- Agentic worker (M3) --- (single internal identity; no PAT)
+AGENT_MAX_TURNS = _get("AGENT_MAX_TURNS", "6")  # inner agent tool-turn budget
+
 # --- Auth ---
 PAT_FILE = ROOT / _get("SF_PAT_FILE", ".secrets/pat")
 

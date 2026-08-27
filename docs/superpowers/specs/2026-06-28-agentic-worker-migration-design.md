@@ -56,7 +56,18 @@ Already verified this session: **egress without EAI** (re-confirm full CLI path 
 - **M0 ✅ (done):** egress proven (no EAI); laptop SDK spike builds+runs hello-world.
 - **M1 ✅ (done 2026-06-23):** agent-SDK image built. `docker/requirements.txt` +`cortex-code-agent-sdk==1.0.2`; `docker/Dockerfile` installs the `cortex` CLI at build time via `curl -LsS https://ai.snowflake.com/static/cc-scripts/install.sh | sh` (+curl/ca-certs, then purged) and sets `PATH`/`CORTEX_CODE_CLI_PATH`. New `app/agent_smoke.py` + healthcheck `cortex_cli` check. Proven in-container (no EAI, no auth): `Cortex Code v1.1.66` + SDK import + `AGENT_SMOKE_OK`; healthcheck 6/6; langgraph_flow still green. (Entrypoint/PAT deferred to M2, as reviewed.)
 - **M2 ✅ (done 2026-08-27):** container hello-world — `app/agent_hello.py`: SDK→CLI→`agent:run` built `hello.txt` in SPCS, `ResultMessage(subtype=success, is_error=False)`, **no EAI, no PAT**. Auth = **internal SPCS OAuth token via a runtime-written `connections.toml`** (`authenticator=oauth`, `token_file_path=/snowflake/session/token`, selected by `connection="spcs"` + `SNOWFLAKE_HOME=/tmp/sfhome`). Offline flags set (`--no-auto-update`, `COCO_*_DISABLED`, `COCO_CLI_CONNECTION_OVERRIDES_INFERENCE=1`). **Key fix:** env `SNOWFLAKE_TOKEN` alone was NOT enough — the CLI resolves the agent connection from `connections.toml`. Also pinned the CLI (see below). Healthcheck 6/6.
-- **M3:** `app/agent_worker.py` with `output_format`; wire into `generate()`.
+- **M3 ✅ (done 2026-08-27):** `app/agent_worker.py` (SDK, `output_format`→`structured_output`
+  {summary,entry_point,files,ready} + manifest.json fallback) wired into
+  `orchestrator.generate()`; `_extract_code`/single-file prompt removed; `State.code`→`workdir`.
+  Agent works in a LOCAL cwd (`/tmp/orch/<task>/iter-N`); tree copied to stage for audit.
+  `run_tests` runs **visible vs held-out separately** — only visible output is fed back to
+  the agent (held-out details never leave); gate = both green. Shared auth in `app/agent_env.py`.
+  Proven: task-add→DONE via agent (structured_output); task-impossible→NEEDS_HUMAN@3. Healthcheck 6/6.
+  **Two bugs found & fixed during M3:** (a) feedback leaked full pytest output incl. held-out →
+  now visible-only; (b) toy "impossible" fixture was gameable by a degenerate `__eq__` → hardened to
+  typed asserts (`type(r) is int and r==N`). **OPEN (hardening, later): held-out tests physically
+  live on the mounted stage the agent's shell can reach — for a *gameable* task a clever agent could
+  read them. Fix later via no-mount/transient-fetch or a separate gate container (defense-in-depth).**
 - **M4:** re-verify 1.4 + 1.5 with agent artifacts.
 - **M5:** end-to-end loop (1.6) on the agent worker.
 - **M6:** ~~dual identity + least-priv PAT~~ **DROPPED** — M2 proved the CLI uses the internal SPCS token (single identity). Remaining M6 work: run the agent under `ORCH_PROJ_<ID>` (mechanism from 1.6b), no PAT.

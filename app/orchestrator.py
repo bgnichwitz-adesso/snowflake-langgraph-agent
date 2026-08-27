@@ -27,20 +27,14 @@ from typing import TypedDict
 import snowflake.connector
 from langgraph.graph import END, START, StateGraph
 
-from cortex_client import cortex_complete
+import agent_worker
 from gate import gate
 
 MOUNT = os.environ.get("MOUNT_PATH", "/workspace")
+AGENT_BASE = os.environ.get("AGENT_CWD_BASE", "/tmp/orch")  # local agent cwd root
 TASK_ID = os.environ["TASK_ID"]
 CORE = os.environ["CORE_SCHEMA"]
 MAX_ITER = int(os.environ.get("MAX_ITER", "10"))
-
-SYSTEM = (
-    "You are a senior Python developer. You are given a task and the visible "
-    "tests it must pass. Return ONLY the full content of solution.py — no "
-    "explanation, no markdown fences. The code must be importable and define "
-    "exactly what the tests need."
-)
 
 
 class Ctx:
@@ -55,19 +49,9 @@ class Ctx:
 
 class State(TypedDict, total=False):
     iteration: int
-    code: str
+    workdir: str        # local dir where the agent wrote this iteration's files
     last_output: str
     decision: str
-
-
-def _extract_code(text: str) -> str:
-    t = text.strip()
-    if "```" in t:
-        block = t.split("```")[1]
-        if block.lower().startswith("python"):
-            block = block[len("python"):]
-        return block.strip() + "\n"
-    return t + "\n"
 
 
 def load_task() -> None:
@@ -116,51 +100,81 @@ def load_task() -> None:
 
 def generate(state: State) -> dict:
     it = state["iteration"]
-    messages = [{"role": "system", "content": SYSTEM},
-                {"role": "user", "content": Ctx.spec_text}]
-    if state.get("last_output"):
-        messages.append({
-            "role": "user",
-            "content": "Your previous attempt failed these tests. Fix it. "
-                       f"Test output:\n{state['last_output'][:3000]}",
-        })
-    result = cortex_complete(messages, temperature=0, conn=Ctx.conn)
-    code = _extract_code(result["text"])
+    # Agent works in a LOCAL dir it fully controls; it never sees the frozen
+    # (held-out) tests, which live only under Ctx.tests_dir on the mounted stage.
+    cwd = os.path.join(AGENT_BASE, TASK_ID, f"iter-{it}")
+    res = agent_worker.run(spec=Ctx.spec_text,
+                           last_output=state.get("last_output"), cwd=cwd)
+    # Persist the produced tree to the stage for audit (best-effort, non-fatal).
+    try:
+        shutil.copytree(cwd, os.path.join(Ctx.task_dir, f"iter-{it}"),
+                        dirs_exist_ok=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[iter {it}] stage copy warn: {exc}", flush=True)
+    usage = res.get("usage") or {}
+    tokens = usage.get("total_tokens") or usage.get("output_tokens")
     cur = Ctx.conn.cursor()
     cur.execute(
         f"INSERT INTO {Ctx.artifact_schema}.DEV_COMMENTS "
         "(task_id, iteration, author, comment) VALUES (%s,%s,%s,%s)",
         (TASK_ID, it, "developer",
-         f"generated solution ({result['usage'].get('total_tokens')} tokens)"),
+         f"[{res['source']}] {res['summary'][:400]} "
+         f"(turns={res.get('num_turns')}, tokens={tokens}, "
+         f"cost={res.get('total_cost_usd')})"),
     )
-    print(f"[iter {it}] generated {len(code)} chars", flush=True)
-    return {"code": code}
+    print(f"[iter {it}] agent done (source={res['source']}, "
+          f"is_error={res['is_error']})", flush=True)
+    return {"workdir": cwd}
+
+
+def _pytest(paths, workdir, env):
+    return subprocess.run(
+        [sys.executable, "-m", "pytest", *paths, "-q"],
+        cwd=workdir, capture_output=True, text=True, env=env,
+    )
 
 
 def run_tests(state: State) -> dict:
     it = state["iteration"]
-    workdir = os.path.join(Ctx.task_dir, f"iter-{it}")
-    os.makedirs(workdir, exist_ok=True)
-    with open(os.path.join(workdir, "solution.py"), "w") as fh:
-        fh.write(state["code"])
-    # copy the frozen tests (visible + held-out) next to the solution
-    for fn in os.listdir(Ctx.tests_dir):
-        if fn.endswith(".py"):
-            shutil.copy(os.path.join(Ctx.tests_dir, fn), workdir)
-    proc = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q"],
-        cwd=workdir, capture_output=True, text=True,
-    )
-    output = (proc.stdout + proc.stderr)[:5000]
-    cur = Ctx.conn.cursor()
-    cur.execute(
+    workdir = state["workdir"]              # the agent's local output tree
+    # Import the agent's solution via PYTHONPATH; the agent's own files/scratch
+    # tests in workdir are NOT collected (we pass explicit frozen-test paths).
+    env = dict(os.environ)
+    env["PYTHONPATH"] = workdir + os.pathsep + env.get("PYTHONPATH", "")
+
+    frozen = [f for f in os.listdir(Ctx.tests_dir)
+              if f.startswith("test_") and f.endswith(".py")]
+    visible = [os.path.join(Ctx.tests_dir, f) for f in frozen if "visible" in f]
+    heldout = [os.path.join(Ctx.tests_dir, f) for f in frozen if "visible" not in f]
+    if not visible:                        # no naming convention → treat all as visible
+        visible, heldout = [Ctx.tests_dir], []
+
+    # VISIBLE: their output is the ONLY thing fed back to the agent.
+    vis = _pytest(visible, workdir, env)
+    vis_ok = vis.returncode == 0
+    # HELD-OUT: gate-only; output is NEVER returned to the agent (no leak).
+    held_ok = True
+    if heldout:
+        held_ok = _pytest(heldout, workdir, env).returncode == 0
+
+    passed = vis_ok and held_ok
+    exit_code = 0 if passed else 1
+    stored = ((vis.stdout + vis.stderr)[:4000]
+              + f"\n[held-out gate: {'PASS' if held_ok else 'FAIL'}]")
+    Ctx.conn.cursor().execute(
         f"INSERT INTO {Ctx.artifact_schema}.TEST_RESULTS "
         "(task_id, iteration, tool, exit_code, passed, output) "
         "VALUES (%s,%s,%s,%s,%s,%s)",
-        (TASK_ID, it, "pytest", proc.returncode, proc.returncode == 0, output),
+        (TASK_ID, it, "pytest", exit_code, passed, stored),
     )
-    print(f"[iter {it}] pytest exit={proc.returncode}", flush=True)
-    return {"last_output": output}
+    # Feedback = visible only; if only held-out failed, a generic hint (no details).
+    feedback = (vis.stdout + vis.stderr)[:5000]
+    if vis_ok and not held_ok:
+        feedback += ("\n\nNote: additional hidden acceptance tests are still "
+                     "failing. Re-examine the specification and edge cases.")
+    print(f"[iter {it}] pytest visible={'ok' if vis_ok else 'fail'} "
+          f"heldout={'ok' if held_ok else 'fail'} -> exit={exit_code}", flush=True)
+    return {"last_output": feedback}
 
 
 def gate_node(state: State) -> dict:
