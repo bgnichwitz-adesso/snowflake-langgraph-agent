@@ -55,15 +55,15 @@ Already verified this session: **egress without EAI** (re-confirm full CLI path 
 ## Migration sequence (gated, each a commit/rollback point)
 - **M0 ✅ (done):** egress proven (no EAI); laptop SDK spike builds+runs hello-world.
 - **M1 ✅ (done 2026-06-23):** agent-SDK image built. `docker/requirements.txt` +`cortex-code-agent-sdk==1.0.2`; `docker/Dockerfile` installs the `cortex` CLI at build time via `curl -LsS https://ai.snowflake.com/static/cc-scripts/install.sh | sh` (+curl/ca-certs, then purged) and sets `PATH`/`CORTEX_CODE_CLI_PATH`. New `app/agent_smoke.py` + healthcheck `cortex_cli` check. Proven in-container (no EAI, no auth): `Cortex Code v1.1.66` + SDK import + `AGENT_SMOKE_OK`; healthcheck 6/6; langgraph_flow still green. (Entrypoint/PAT deferred to M2, as reviewed.)
-- **M2:** **container hello-world** — SDK builds `hello.py` in SPCS, returns `ResultMessage`, no EAI. *(the stated goal of this test track)*
+- **M2 ✅ (done 2026-08-27):** container hello-world — `app/agent_hello.py`: SDK→CLI→`agent:run` built `hello.txt` in SPCS, `ResultMessage(subtype=success, is_error=False)`, **no EAI, no PAT**. Auth = **internal SPCS OAuth token via a runtime-written `connections.toml`** (`authenticator=oauth`, `token_file_path=/snowflake/session/token`, selected by `connection="spcs"` + `SNOWFLAKE_HOME=/tmp/sfhome`). Offline flags set (`--no-auto-update`, `COCO_*_DISABLED`, `COCO_CLI_CONNECTION_OVERRIDES_INFERENCE=1`). **Key fix:** env `SNOWFLAKE_TOKEN` alone was NOT enough — the CLI resolves the agent connection from `connections.toml`. Also pinned the CLI (see below). Healthcheck 6/6.
 - **M3:** `app/agent_worker.py` with `output_format`; wire into `generate()`.
 - **M4:** re-verify 1.4 + 1.5 with agent artifacts.
 - **M5:** end-to-end loop (1.6) on the agent worker.
-- **M6:** role-scoping (1.6b) with dual identity + least-priv PAT.
+- **M6:** ~~dual identity + least-priv PAT~~ **DROPPED** — M2 proved the CLI uses the internal SPCS token (single identity). Remaining M6 work: run the agent under `ORCH_PROJ_<ID>` (mechanism from 1.6b), no PAT.
 - **then 1.8** (TESTER generation) on the new base.
 
 ## Open design points (resolve in spec review, not now)
-1. **Dual identity / least privilege** — session token (`ORCH_PROJ_<ID>`) vs PAT role; scope + coexistence.
+1. ✅ **Dual identity / least privilege — RESOLVED 2026-08-27 (M2):** NO PAT, NO dual identity. The Cortex CLI authenticates with the **internal SPCS OAuth token** (connections.toml `authenticator=oauth` + `token_file_path=/snowflake/session/token`), i.e. the SAME identity as the orchestrator SQL. Least-priv = run the agent under `ORCH_PROJ_<ID>` (1.6b mechanism).
 2. ✅ **Multi-file artifact / `output_format`** — RESOLVED 2026-06-23 (see `spec/Phase1_Orchestrator_Loop.md` → "Agentischer Worker — festgelegte Details"): schema `{summary, entry_point, files[], ready}`; **no thread-resume across outer iterations** (fresh agent invocation seeded from durable state each round).
 3. **Observability** — measure whether SDK-headless auto-logs to `AI_OBSERVABILITY_EVENTS`; else our own append-only tables.
 4. **Security** — agent runs arbitrary bash (`bypassPermissions`) inside the container; bounded by container grants.
