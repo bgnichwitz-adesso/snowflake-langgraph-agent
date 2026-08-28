@@ -17,6 +17,19 @@ from agent_env import bootstrap_agent_auth
 MODEL = os.environ.get("CORTEX_MODEL", "claude-sonnet-4-6")
 MAX_TURNS = int(os.environ.get("AGENT_MAX_TURNS", "6"))
 
+# --- Tool sandbox (gate integrity) -------------------------------------------
+# The developer agent must not be able to read the held-out tests. Those live in
+# a Snowflake table (no SQL grant to the agent's role) AND the gate's OAuth token
+# sits on the shared container filesystem at /snowflake/session/token — a
+# filesystem-capable agent could read that token and escalate. So we scope the
+# agent's TOOLS: file tools only, every call path-jailed to its cwd; no shell, no
+# SQL, no network. This closes both the SQL-read and the token-file-read vectors
+# in a single container (see docs migration M4). A least-priv PAT connection is
+# the documented next-layer hardening for when real tasks need shell/SQL.
+_ALLOWED_TOOLS = {"Read", "Write", "Edit", "MultiEdit", "LS", "Glob", "Grep"}
+_PATH_KEYS = ("file_path", "path", "notebook_path")
+_FORBIDDEN_SUBSTR = ("/snowflake",)  # never let a path reach the session token
+
 ARTIFACT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -72,6 +85,32 @@ def _collect(result, cwd: str) -> dict:
     }
 
 
+def _make_guard(cwd: str):
+    """Per-tool allow/deny: file tools only, every path jailed to cwd."""
+    from cortex_code_agent_sdk import PermissionResultAllow, PermissionResultDeny
+
+    root = os.path.realpath(cwd)
+
+    def _within(p: str) -> bool:
+        if any(s in p for s in _FORBIDDEN_SUBSTR):
+            return False
+        ap = os.path.realpath(p if os.path.isabs(p) else os.path.join(root, p))
+        return ap == root or ap.startswith(root + os.sep)
+
+    async def can_use_tool(tool_name, tool_input, _ctx):
+        if tool_name not in _ALLOWED_TOOLS:
+            return PermissionResultDeny(
+                message=f"tool '{tool_name}' is disabled for the developer agent")
+        for k in _PATH_KEYS:
+            v = tool_input.get(k) if isinstance(tool_input, dict) else None
+            if isinstance(v, str) and v and not _within(v):
+                return PermissionResultDeny(
+                    message=f"path outside working directory is not allowed: {v}")
+        return PermissionResultAllow()
+
+    return can_use_tool
+
+
 async def _run_async(prompt: str, cwd: str) -> dict:
     from cortex_code_agent_sdk import CortexCodeAgentOptions, query
 
@@ -80,8 +119,11 @@ async def _run_async(prompt: str, cwd: str) -> dict:
     opts = dict(
         cwd=cwd,
         connection=conn_name,
-        permission_mode="bypassPermissions",
-        allow_dangerously_skip_permissions=True,
+        # SDK-managed permissions: every tool call routes through _make_guard
+        # (allowlist + cwd path-jail). No bypass — the guard is the hard gate.
+        permission_mode="default",
+        can_use_tool=_make_guard(cwd),
+        disallowed_tools=["Bash"],   # belt: hard-deny shell at the flag level too
         max_turns=MAX_TURNS,
         env=agent_env,
         extra_args={"no-auto-update": None},
