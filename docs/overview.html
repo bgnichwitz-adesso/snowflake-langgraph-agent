@@ -65,8 +65,8 @@
 </head>
 <body>
 <header>
-  <h1>Snowflake LangGraph Orchestrator <span class="badge b-ok">M3 ✅ — Agent im deterministischen Loop</span></h1>
-  <div class="sub">Deterministischer, tabellengetriebener Code-Orchestrator auf Snowflake&nbsp;SPCS · Claude via Cortex, intern (kein Egress) · <code>main</code>&nbsp;@&nbsp;<code>332fe85</code></div>
+  <h1>Snowflake LangGraph Orchestrator <span class="badge b-ok">M4 ✅ — Agent verarbeitet Code-Artefakte</span></h1>
+  <div class="sub">Deterministischer, tabellengetriebener Code-Orchestrator auf Snowflake&nbsp;SPCS · Claude via Cortex, intern (kein Egress) · <code>main</code>&nbsp;@&nbsp;<code>feat/m4-agent-artifacts</code></div>
   <nav>
     <a href="#status">Status</a><a href="#loop">Loop</a><a href="#arch">Architektur</a>
     <a href="#components">Komponenten</a><a href="#roadmap">Roadmap</a>
@@ -80,8 +80,8 @@
     <div class="grid tiles">
       <div class="tile"><div class="k">Phase 0 — Bootstrap</div><div class="v">✅ abgeschlossen</div></div>
       <div class="tile"><div class="k">Phase 1 — Loop-Kern (1.0–1.6b)</div><div class="v">✅ läuft (Healthcheck 6/6)</div></div>
-      <div class="tile"><div class="k">Agentic-Worker-Umbau (M-Serie)</div><div class="v">🟠 M1–M3 ✅ · M4 als Nächstes</div></div>
-      <div class="tile"><div class="k">Nächster Schritt</div><div class="v">M4 — 1.4/1.5 mit Agent-Artefakten re-verifizieren</div></div>
+      <div class="tile"><div class="k">Agentic-Worker-Umbau (M-Serie)</div><div class="v">🟢 M1–M4 ✅ · M5 als Nächstes</div></div>
+      <div class="tile"><div class="k">Nächster Schritt</div><div class="v">M5 — voller e2e-Loop auf dem Agent-Worker</div></div>
       <div class="tile"><div class="k">Kosten gerade</div><div class="v">0 (Pool suspended)</div></div>
     </div>
     <div class="panel" style="margin-top:12px">
@@ -90,13 +90,16 @@
       <b>agentischen Worker (Cortex Code Agent SDK)</b> — der äußere deterministische Loop und
       das frozen-test Gate bleiben unverändert das Herz. <b>1.7 (Checkpointing) wurde verworfen</b>
       (Recovery ist task-granular über die append-only Spur).
-      <div style="margin-top:8px;color:var(--muted);font-size:13px"><b>M3 erledigt:</b> der agentische
-      Worker ist <b>im deterministischen Loop</b> aktiv (`generate()` → Cortex Code SDK, schreibt Dateien
-      selbst, liefert <code>structured_output</code>). Bewiesen: <code>task-add → DONE</code>,
-      <code>task-impossible → NEEDS_HUMAN</code>. <b>Gate-Integrität:</b> visible- und held-out-Tests laufen
-      getrennt — der Agent bekommt nur die sichtbaren als Feedback; held-out entscheidet mit, verlässt aber
-      nie den Container. (Offener Härtungspunkt: held-out-Dateien liegen physisch auf dem gemounteten Stage —
-      später isolieren.) Interne Identität (kein PAT), CLI gepinnt <code>v1.1.66</code>.
+      <div style="margin-top:8px;color:var(--muted);font-size:13px"><b>M4 erledigt:</b> der agentische
+      Worker verarbeitet <b>Code-Artefakte</b> im Loop. Bewiesen (<code>p_m4_agent.py</code>):
+      <code>task-multi</code> (Mehrdatei: <code>app.py</code>+<code>mathutil.py</code>) → DONE + beide Dateien
+      persistiert; <code>task-feedback</code> (Wert nicht in der Spec) → iter0 FAIL → Konvergenz zu DONE via
+      Test-Feedback. <b>Gate-Integrität / held-out:</b> frozen Tests liegen jetzt in separaten Tabellen
+      (<code>TEST_VISIBLE</code>/<code>TEST_HELDOUT</code>, nicht auf dem Stage), werden am Gate transient
+      materialisiert und sofort gelöscht; der Agent ist <b>tool-gesandboxt</b> (nur Datei-Tools, cwd-gejailt,
+      kein Shell/SQL) → kann held-out weder per SQL noch übers Token-File lesen. <i>Hinweis: das früher
+      vermutete „held-out-Leck" war ein Test-Artefakt (ratbarer Sentinel 42), kein echtes Exploit — die
+      Isolation bleibt als defense-in-depth.</i> Interne Identität (kein PAT), CLI gepinnt <code>v1.1.66</code>.
       Quellen: <code>docs/COMPONENT_AUDIT.md</code>, <code>spec/Phase1_Orchestrator_Loop.md</code>, <code>docs/superpowers/specs/2026-06-28-agentic-worker-migration-design.md</code></div>
     </div>
   </section>
@@ -106,9 +109,9 @@
     <div class="flow">
       <div class="node"><b>load_task</b><small>LOCKED aus TASK_SPECS + PROJECTS-Lookup; Job läuft als <code>ORCH_PROJ_&lt;ID&gt;</code></small></div>
       <div class="arrow">→</div>
-      <div class="node" style="border-left:3px solid var(--ok)"><b>DEVELOPER-Node ✅</b><small>agentischer Worker (Cortex Code SDK): schreibt/führt aus/iteriert in lokalem cwd, liefert <code>structured_output</code> · <i>im Loop aktiv (M3); held-out-Tests nur im Gate, nie als Feedback</i></small></div>
+      <div class="node" style="border-left:3px solid var(--ok)"><b>DEVELOPER-Node ✅</b><small>agentischer Worker (Cortex Code SDK): schreibt/iteriert in lokalem cwd, liefert <code>structured_output</code> · <i>tool-gesandboxt (nur Datei-Tools, cwd-gejailt, kein Shell/SQL) → sieht held-out nie</i></small></div>
       <div class="arrow">→</div>
-      <div class="node"><b>run_tests</b><small>frozen Tests über den Artefakt-Baum, pytest, Exit-Code+Log → TEST_RESULTS</small></div>
+      <div class="node"><b>run_tests</b><small>frozen Tests aus <code>TEST_VISIBLE</code>/<code>TEST_HELDOUT</code> transient materialisiert, pytest, Exit-Code+Log → TEST_RESULTS, danach gelöscht</small></div>
       <div class="arrow">→</div>
       <div class="node"><b>gate</b><small>liest <b>nur</b> den Exit-Code — kein LLM-Urteil</small></div>
     </div>
@@ -160,16 +163,15 @@
     <h3>Container-Code · app/</h3>
     <div class="panel"><table>
       <tr><th>Datei</th><th>Zweck</th><th>Status</th></tr>
-      <tr><td><code>orchestrator.py</code></td><td>Der LangGraph-Loop; generate()=Agent, run_tests visible/held-out getrennt</td><td><span class="badge b-ok">M3 ✅</span></td></tr>
+      <tr><td><code>orchestrator.py</code></td><td>Der LangGraph-Loop; generate()=Agent, run_tests materialisiert visible/held-out transient aus Tabellen</td><td><span class="badge b-ok">M4 ✅</span></td></tr>
       <tr><td><code>gate.py</code></td><td>PASS/FAIL nur über Exit-Code</td><td><span class="badge b-ok">KEEP</span></td></tr>
-      <tr><td><code>test_runner.py</code></td><td>pytest im Container → TEST_RESULTS</td><td><span class="badge b-warn">ADAPT · M4</span></td></tr>
+      <tr><td><code>agent_worker.py</code></td><td>Agentischer Worker (SDK, structured_output + manifest-Fallback); <b>tool-gesandboxt</b> (nur Datei-Tools, cwd-gejailt, kein Shell/SQL)</td><td><span class="badge b-ok">M3/M4 ✅</span></td></tr>
+      <tr><td><code>agent_env.py</code></td><td>Gemeinsamer Auth-Bootstrap (oauth/connections.toml)</td><td><span class="badge b-ok">M3 ✅ NEU</span></td></tr>
       <tr><td><code>cortex_client.py</code></td><td>One-shot COMPLETE (3-arg)</td><td><span class="badge b-plan">KEEP · Legacy/Fallback</span></td></tr>
       <tr><td><code>agent_hello.py</code></td><td>M2-Beweis: Agent läuft in SPCS (internes Token)</td><td><span class="badge b-ok">KEEP · NEU (M2)</span></td></tr>
       <tr><td><code>agent_smoke.py</code></td><td>M1-Beweis: CLI+SDK im Container (offline)</td><td><span class="badge b-ok">KEEP · NEU (M1)</span></td></tr>
-      <tr><td><code>stage_io.py</code></td><td>Stage-Mount-Verify</td><td><span class="badge b-ok">KEEP</span></td></tr>
       <tr><td><code>langgraph_flow.py</code></td><td>Smoke-PoC (Healthcheck nutzt es)</td><td><span class="badge b-ok">KEEP</span></td></tr>
-      <tr><td><code>agent_worker.py</code></td><td>Agentischer Worker (SDK, output_format→structured_output + manifest-Fallback)</td><td><span class="badge b-ok">M3 ✅</span></td></tr>
-      <tr><td><code>agent_env.py</code></td><td>Gemeinsamer Auth-Bootstrap (oauth/connections.toml)</td><td><span class="badge b-ok">M3 ✅ NEU</span></td></tr>
+      <tr class="retired"><td><code>test_runner.py · stage_io.py</code></td><td>alt: Single-File-pytest / Stage-Round-Trip</td><td><span class="badge b-retire">GELÖSCHT (M4)</span></td></tr>
       <tr class="retired"><td><code>cortex_test.py</code></td><td>Phase-0 Cortex-Smoke</td><td><span class="badge b-retire">RETIRED</span></td></tr>
     </table></div>
     <h3>Scripts · scripts/</h3>
@@ -180,7 +182,10 @@
       <tr><td><code>build_push.sh</code> · <code>registry_login.sh</code> · <code>image_uri.py</code></td><td>Image-Pipeline</td><td><span class="badge b-ok">KEEP</span></td></tr>
       <tr><td><code>run_job.py</code></td><td>Generischer SPCS-Job-Runner</td><td><span class="badge b-ok">KEEP</span></td></tr>
       <tr><td><code>healthcheck.py</code></td><td>End-to-end Check (6/6), self-suspending</td><td><span class="badge b-ok">KEEP · cortex_cli-Check (M1)</span></td></tr>
-      <tr><td><code>p14 / p15 / p16 / p16b</code></td><td>Regressions-Proofs (stage / gate / loop / role-scoping)</td><td><span class="badge b-warn">ADAPT · M4–M6</span></td></tr>
+      <tr><td><code>p_m4_agent.py</code></td><td>M4-Proof: Mehrdatei→DONE+persistiert · Feedback-Konvergenz (iter0 FAIL→DONE)</td><td><span class="badge b-ok">M4 ✅ NEU</span></td></tr>
+      <tr><td><code>p16_loop.py</code></td><td>Loop-Proof (solvable→DONE, impossible→NEEDS_HUMAN); seedet in TEST_VISIBLE/HELDOUT</td><td><span class="badge b-ok">KEEP</span></td></tr>
+      <tr><td><code>p16b_role_scoping.py</code></td><td>least-priv-Lauf als <code>ORCH_PROJ_&lt;ID&gt;</code></td><td><span class="badge b-warn">PARKED · M6 (held-out-Grant-Entscheidung)</span></td></tr>
+      <tr class="retired"><td><code>p14_stage_io · p15_test_gate</code></td><td>alte Stage-/Gate-Proofs</td><td><span class="badge b-retire">GELÖSCHT (M4)</span></td></tr>
       <tr><td><code>p1_connect.py</code></td><td>Connection-Smoke</td><td><span class="badge b-ok">KEEP</span></td></tr>
       <tr class="retired"><td><code>p0_enable_idtoken · p2_service · p3_cortex</code></td><td>Phase-0 Reste</td><td><span class="badge b-retire">RETIRED</span></td></tr>
     </table></div>
@@ -198,8 +203,9 @@
       <tr><td>M0 / M1</td><td>Egress ohne EAI · Agent-SDK-Image (CLI+SDK, gepinnt)</td><td><span class="badge b-ok">✅</span></td></tr>
       <tr><td>M2</td><td>Container-Hello-World — Agent läuft in SPCS, internes Token, kein PAT/EAI</td><td><span class="badge b-ok">✅</span></td></tr>
       <tr><td>M3</td><td>agent_worker.py + Verdrahtung in generate(); visible/held-out getrennt</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td><b>M4</b></td><td><b>1.4/1.5 mit Agent-Artefakten re-verifizieren</b> (p14/p15)</td><td><span class="badge b-warn">◀ NÄCHSTES</span></td></tr>
-      <tr><td>M5–M6</td><td>e2e-Loop → Lauf unter <code>ORCH_PROJ_&lt;ID&gt;</code> (+ held-out physisch isolieren)</td><td><span class="badge b-plan">geplant</span></td></tr>
+      <tr><td>M4</td><td>Agent-Code-Artefakte: Mehrdatei + Feedback-Konvergenz; held-out in separate Tabellen + Agent-Tool-Sandbox</td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td><b>M5</b></td><td><b>voller e2e-Loop auf dem Agent-Worker</b></td><td><span class="badge b-warn">◀ NÄCHSTES</span></td></tr>
+      <tr><td>M6</td><td>ganzen Loop unter <code>ORCH_PROJ_&lt;ID&gt;</code> (held-out-Grant-Entscheidung fürs In-Container-Gate)</td><td><span class="badge b-plan">geplant</span></td></tr>
       <tr><td>1.8</td><td>TESTER-Generierung (Separation of Duties, frozen + held-out)</td><td><span class="badge b-plan">geplant</span></td></tr>
       <tr><td>Phase 2</td><td>SPEC-Admission (Judge advisory + deterministischer Verifier + HITL)</td><td><span class="badge b-plan">Spec fertig</span></td></tr>
       <tr><td>Phase 3</td><td>Deployment = deterministisches GitHub-Repo (idempotent DDL + Manifest + frozen Tests)</td><td><span class="badge b-plan">Spec fertig</span></td></tr>
@@ -214,7 +220,7 @@
       <div class="tile"><div class="v">Feedback-Loop = Tabellen, nicht GitHub</div><div class="k">Läuft überall; GitHub ist nur Liefer-Artefakt (Phase 3), nie der Loop.</div></div>
       <div class="tile"><div class="v">Tenant = Datenbank</div><div class="k">Isolierte DBs statt RAP (operativ zu teuer). Mehrere Instanzen via .env.</div></div>
       <div class="tile"><div class="v">Append-only + RBAC</div><div class="k">Jede Änderung = neue Zeile; LEAD nur INSERT; keine autonomen DROPs (Versionierung + human-gated Cleanup).</div></div>
-      <div class="tile"><div class="v">Agentischer Worker (im Loop aktiv)</div><div class="k">Cortex Code SDK statt One-Shot; interne Identität. Gate bleibt Autorität; visible vs held-out getrennt, kein Feedback-Leak; kein Thread-Resume außen.</div></div>
+      <div class="tile"><div class="v">Agentischer Worker (im Loop aktiv)</div><div class="k">Cortex Code SDK statt One-Shot; interne Identität. Gate bleibt Autorität; held-out in separaten Tabellen + Agent <b>tool-gesandboxt</b> (kein Shell/SQL) → kann held-out nicht lesen; kein Thread-Resume außen.</div></div>
       <div class="tile"><div class="v">Reproduzierbarkeit</div><div class="k">Gepinnte Deps + gepinnte CLI-Version (Tarball+sha256). Kein „latest"-Drift.</div></div>
       <div class="tile"><div class="v">Governance</div><div class="k">Agents build+test; Humans own the blast radius (Account/Security/Network/DROP = HITL).</div></div>
     </div>
@@ -229,12 +235,13 @@
       <span class="pill">5 Workflow-Rollen + <code>ORCH_PROJ_DEMO</code></span>
       <span class="pill">TASK_SPECS · PROJECTS · View</span>
       <span class="pill">Projekt <code>DEMO</code> (DB <code>DEMO_PROJ</code>, Fixture <code>SAMPLE_DATA</code>)</span>
+      <span class="pill">artifacts <code>ORCHESTRATOR.DEMO</code>: DEV_COMMENTS · TEST_RESULTS · RUNS · <b>TEST_VISIBLE</b> · <b>TEST_HELDOUT</b></span>
     </div>
   </section>
 
 </main>
 <div class="foot">
-  Generiert aus <code>docs/COMPONENT_AUDIT.md</code>, <code>spec/*</code> und Projekt-Memory · Stand: <code>main</code> @ <code>332fe85</code> (M3) ·
+  Generiert aus <code>docs/COMPONENT_AUDIT.md</code>, <code>spec/*</code> und Projekt-Memory · Stand: <code>feat/m4-agent-artifacts</code> (M4 ✅) ·
   <b>Regel: nach JEDEM Schritt neu generieren</b> · statisch &amp; offline öffbar.
 </div>
 </body>

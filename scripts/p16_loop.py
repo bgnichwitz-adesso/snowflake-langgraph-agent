@@ -8,9 +8,7 @@ Seeds two LOCKED tasks for project DEMO and stages their frozen tests
 
 Uses MAX_ITER=3 to keep the unsolvable run quick (default in code is 10).
 """
-import os
 import sys
-import tempfile
 
 import config
 from sf import connect
@@ -56,7 +54,9 @@ TASKS = {
 }
 
 
-def seed_and_stage(cur, tmp: str) -> None:
+def seed(cur) -> None:
+    """Seed TASK_SPECS + frozen tests into TEST_VISIBLE / TEST_HELDOUT tables
+    (not the mounted stage) so the developer agent can't read them."""
     for task, t in TASKS.items():
         cur.execute(
             f"INSERT INTO {CORE}.TASK_SPECS "
@@ -64,17 +64,13 @@ def seed_and_stage(cur, tmp: str) -> None:
             "VALUES (%s,%s,%s,%s,%s,%s)",
             (task, PROJECT, "tester", "LOCKED", task, t["spec"]),
         )
-        d = os.path.join(tmp, task)
-        os.makedirs(d, exist_ok=True)
-        with open(os.path.join(d, "test_visible.py"), "w") as fh:
-            fh.write(t["visible"])
-        with open(os.path.join(d, "test_heldout.py"), "w") as fh:
-            fh.write(t["heldout"])
         cur.execute(
-            f"PUT 'file://{d}/*.py' @{STAGE}/{task}/tests/ "
-            "AUTO_COMPRESS=FALSE OVERWRITE=TRUE"
-        )
-        print(f"  seeded + staged {task}")
+            f"INSERT INTO {ART}.TEST_VISIBLE (task_id, filename, content) "
+            "VALUES (%s,%s,%s)", (task, "test_visible.py", t["visible"]))
+        cur.execute(
+            f"INSERT INTO {ART}.TEST_HELDOUT (task_id, filename, content) "
+            "VALUES (%s,%s,%s)", (task, "test_heldout.py", t["heldout"]))
+        print(f"  seeded {task} (spec + TEST_VISIBLE + TEST_HELDOUT)")
 
 
 def run_loop(cur, tag: str, task: str) -> None:
@@ -124,9 +120,8 @@ def main() -> int:
     try:
         with connect() as conn:
             cur = conn.cursor()
-            print("=== seed tasks + stage frozen tests ===")
-            with tempfile.TemporaryDirectory() as tmp:
-                seed_and_stage(cur, tmp)
+            print("=== seed tasks + frozen tests (into tables) ===")
+            seed(cur)
 
             for task in TASKS:
                 run_loop(cur, tag, task)
@@ -145,7 +140,8 @@ def main() -> int:
                 cur.execute(f"REMOVE @{STAGE}/{task}")
             cur.execute(f"DELETE FROM {CORE}.TASK_SPECS WHERE project_id = '{PROJECT}' "
                         "AND task_id IN ('task-add','task-impossible')")
-            for tbl in ("DEV_COMMENTS", "TEST_RESULTS", "RUNS"):
+            for tbl in ("DEV_COMMENTS", "TEST_RESULTS", "RUNS",
+                        "TEST_VISIBLE", "TEST_HELDOUT"):
                 cur.execute(f"DELETE FROM {ART}.{tbl} "
                             "WHERE task_id IN ('task-add','task-impossible')")
             cur.execute(f"ALTER COMPUTE POOL {POOL} SUSPEND")

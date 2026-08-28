@@ -110,6 +110,24 @@ def main() -> int:
                     created_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
                     created_by STRING NOT NULL DEFAULT CURRENT_USER()
                 )""",
+                # Frozen tests live in SEPARATE tables (not on the mounted stage,
+                # not in git) so the developer agent can't read them. VISIBLE may
+                # be shown to the agent (prompt); HELD-OUT is gate-only and is NOT
+                # granted to the project role (table-level isolation, no RAP).
+                f"""CREATE TABLE IF NOT EXISTS {art}.TEST_VISIBLE (
+                    task_id    STRING NOT NULL,
+                    filename   STRING NOT NULL,
+                    content    STRING,
+                    created_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+                    created_by STRING NOT NULL DEFAULT CURRENT_USER()
+                )""",
+                f"""CREATE TABLE IF NOT EXISTS {art}.TEST_HELDOUT (
+                    task_id    STRING NOT NULL,
+                    filename   STRING NOT NULL,
+                    content    STRING,
+                    created_at TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+                    created_by STRING NOT NULL DEFAULT CURRENT_USER()
+                )""",
             ]
             for stmt in ddl:
                 cur.execute(stmt)
@@ -123,6 +141,10 @@ def main() -> int:
                 f"GRANT INSERT, SELECT ON TABLE {art}.DEV_COMMENTS TO ROLE {role}",
                 f"GRANT INSERT, SELECT ON TABLE {art}.TEST_RESULTS TO ROLE {role}",
                 f"GRANT INSERT, SELECT ON TABLE {art}.RUNS TO ROLE {role}",
+                # VISIBLE tests: readable by the project role. HELD-OUT: deliberately
+                # NOT granted to {role} (only the owner/gate reads it) — table-level
+                # isolation so the developer agent can't read held-out tests.
+                f"GRANT SELECT ON TABLE {art}.TEST_VISIBLE TO ROLE {role}",
                 # read the task control-plane (table + current view + registry)
                 f"GRANT USAGE ON SCHEMA {config.DATABASE}.{config.SCHEMA} TO ROLE {role}",
                 f"GRANT SELECT ON TABLE {config.DATABASE}.{config.SCHEMA}.TASK_SPECS TO ROLE {role}",
@@ -185,7 +207,8 @@ def main() -> int:
 
             ok = (
                 bool(to_runner)
-                and {"DEV_COMMENTS", "TEST_RESULTS", "RUNS"} <= tabs
+                and {"DEV_COMMENTS", "TEST_RESULTS", "RUNS",
+                     "TEST_VISIBLE", "TEST_HELDOUT"} <= tabs
                 and "CODE_STAGE" in stages
             )
             print(f"\n{'PASS — project ' + pid + ' registered' if ok else 'FAIL'}")

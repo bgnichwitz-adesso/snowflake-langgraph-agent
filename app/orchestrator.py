@@ -43,8 +43,7 @@ class Ctx:
     artifact_schema = ""
     execution_role = ""
     spec_text = ""
-    task_dir = ""       # /workspace/<task>
-    tests_dir = ""      # /workspace/<task>/tests
+    task_dir = ""       # /workspace/<task> (mounted stage; for artifact audit copy)
 
 
 class State(TypedDict, total=False):
@@ -93,7 +92,6 @@ def load_task() -> None:
     Ctx.execution_role = execution_role
     Ctx.spec_text = spec_text
     Ctx.task_dir = os.path.join(MOUNT, TASK_ID)
-    Ctx.tests_dir = os.path.join(Ctx.task_dir, "tests")
     print(f"loaded task {TASK_ID} (project {project_id}); "
           f"role={execution_role}; artifacts={artifact_schema}", flush=True)
 
@@ -101,7 +99,7 @@ def load_task() -> None:
 def generate(state: State) -> dict:
     it = state["iteration"]
     # Agent works in a LOCAL dir it fully controls; it never sees the frozen
-    # (held-out) tests, which live only under Ctx.tests_dir on the mounted stage.
+    # tests (they live in Snowflake tables, materialized only at gate time).
     cwd = os.path.join(AGENT_BASE, TASK_ID, f"iter-{it}")
     res = agent_worker.run(spec=Ctx.spec_text,
                            last_output=state.get("last_output"), cwd=cwd)
@@ -134,32 +132,45 @@ def _pytest(paths, workdir, env):
     )
 
 
+def _materialize(table: str, dest: str) -> list:
+    """Write frozen tests from a Snowflake table into a local temp dir."""
+    os.makedirs(dest, exist_ok=True)
+    cur = Ctx.conn.cursor()
+    cur.execute(f"SELECT filename, content FROM {Ctx.artifact_schema}.{table} "
+                "WHERE task_id = %s", (TASK_ID,))
+    paths = []
+    for fn, content in cur.fetchall():
+        p = os.path.join(dest, fn)
+        with open(p, "w") as fh:
+            fh.write(content or "")
+        paths.append(p)
+    return paths
+
+
 def run_tests(state: State) -> dict:
     it = state["iteration"]
     workdir = state["workdir"]              # the agent's local output tree
-    # Import the agent's solution via PYTHONPATH; the agent's own files/scratch
-    # tests in workdir are NOT collected (we pass explicit frozen-test paths).
     env = dict(os.environ)
     env["PYTHONPATH"] = workdir + os.pathsep + env.get("PYTHONPATH", "")
 
-    frozen = [f for f in os.listdir(Ctx.tests_dir)
-              if f.startswith("test_") and f.endswith(".py")]
-    visible = [os.path.join(Ctx.tests_dir, f) for f in frozen if "visible" in f]
-    heldout = [os.path.join(Ctx.tests_dir, f) for f in frozen if "visible" not in f]
-    if not visible:                        # no naming convention → treat all as visible
-        visible, heldout = [Ctx.tests_dir], []
+    # Frozen tests come from Snowflake tables (NOT the mounted stage, NOT the
+    # agent cwd) into a transient local dir that is deleted right after — so the
+    # developer agent never has held-out tests on disk. VISIBLE feedback only.
+    gate_dir = os.path.join("/tmp/gate", TASK_ID, f"iter-{it}")
+    try:
+        visible = _materialize("TEST_VISIBLE", os.path.join(gate_dir, "visible"))
+        heldout = _materialize("TEST_HELDOUT", os.path.join(gate_dir, "heldout"))
 
-    # VISIBLE: their output is the ONLY thing fed back to the agent.
-    vis = _pytest(visible, workdir, env)
-    vis_ok = vis.returncode == 0
-    # HELD-OUT: gate-only; output is NEVER returned to the agent (no leak).
-    held_ok = True
-    if heldout:
-        held_ok = _pytest(heldout, workdir, env).returncode == 0
+        vis = _pytest(visible, workdir, env) if visible else None
+        vis_ok = vis.returncode == 0 if vis else False
+        held_ok = _pytest(heldout, workdir, env).returncode == 0 if heldout else True
+        vis_out = ((vis.stdout + vis.stderr) if vis else "no visible tests")
+    finally:
+        shutil.rmtree(gate_dir, ignore_errors=True)   # held-out never lingers
 
     passed = vis_ok and held_ok
     exit_code = 0 if passed else 1
-    stored = ((vis.stdout + vis.stderr)[:4000]
+    stored = (vis_out[:4000]
               + f"\n[held-out gate: {'PASS' if held_ok else 'FAIL'}]")
     Ctx.conn.cursor().execute(
         f"INSERT INTO {Ctx.artifact_schema}.TEST_RESULTS "
@@ -168,7 +179,7 @@ def run_tests(state: State) -> dict:
         (TASK_ID, it, "pytest", exit_code, passed, stored),
     )
     # Feedback = visible only; if only held-out failed, a generic hint (no details).
-    feedback = (vis.stdout + vis.stderr)[:5000]
+    feedback = vis_out[:5000]
     if vis_ok and not held_ok:
         feedback += ("\n\nNote: additional hidden acceptance tests are still "
                      "failing. Re-examine the specification and edge cases.")

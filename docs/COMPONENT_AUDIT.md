@@ -11,13 +11,14 @@ Status legend: **KEEP** (unchanged) · **ADAPT** (changes at a milestone) ·
 ## Container code (`app/`)
 | File | Purpose | Status |
 |---|---|---|
-| `orchestrator.py` | The deterministic LangGraph loop (1.6/1.6b) | **ADAPT** — M3/M5: `generate()` → agent worker; `run_tests` tests a tree; `State` carries workdir ref |
+| `orchestrator.py` | The deterministic LangGraph loop (1.6/1.6b); `generate()`=agent worker, `run_tests` materializes visible/held-out from tables into a transient gate dir | **M4 ✅** |
 | `gate.py` | PASS/FAIL on exit code only — sole "done" authority | **KEEP** |
-| `test_runner.py` | Runs pytest per task dir from mounted CODE_STAGE → TEST_RESULTS | **ADAPT** — M4: test a file tree, not one `solution.py` |
+| `agent_worker.py` | Agentic worker (Cortex Code SDK `query()`, `output_format`→structured_output + manifest fallback); **tool-sandboxed** (`can_use_tool`: file tools only, cwd-jailed, no shell/SQL) | **M3/M4 ✅** |
+| `agent_env.py` | Shared auth bootstrap (oauth `connections.toml`, SPCS token) | **M3 ✅ NEW** |
 | `cortex_client.py` | One-shot `CORTEX.COMPLETE` (3-arg) → text+usage | **KEEP as legacy/fallback**; candidate for 1.8 TESTER generation. NOT the worker anymore |
-| `stage_io.py` | Verifies stage volume-mount round-trip (1.4) | **KEEP** as a thin verify helper (agent now owns the writing) |
-| `langgraph_flow.py` | Minimal one-node LangGraph→Cortex smoke; used by `healthcheck` container_e2e | **KEEP** for now → may be replaced by an agent smoke after M2 |
-| `agent_worker.py` | Agentic worker wrapping the Cortex Code SDK `query()` with `output_format` | **NEW** — M3 (does not exist yet) |
+| `langgraph_flow.py` | Minimal one-node LangGraph→Cortex smoke; used by `healthcheck` container_e2e | **KEEP** |
+| `agent_hello.py` / `agent_smoke.py` | M2 hello-world proof / M1 offline import+CLI proof | **KEEP** (proofs) |
+| ~~`test_runner.py`~~ / ~~`stage_io.py`~~ | old single-file pytest / stage round-trip | **DELETED** — folded into `orchestrator.run_tests` + agent owns writing |
 | ~~`cortex_test.py`~~ | Phase-0 Paket-3 Cortex smoke | **RETIRED** — superseded by `cortex_client` self-test + healthcheck |
 
 ## Scripts (`scripts/`)
@@ -27,15 +28,15 @@ Status legend: **KEEP** (unchanged) · **ADAPT** (changes at a milestone) ·
 | `sf.py` | Snowflake connection helper (PAT → headless) | **KEEP** |
 | `p2_infra.py` | Create DB/schema/compute pool/image repo | **KEEP** (setup) |
 | `p6_roles.py` | Workflow roles + TASK_SPECS/PROJECTS/view + grants | **KEEP** (setup) |
-| `register_project.py` | Onboard a project: `ORCH_PROJ_<ID>` role, artifact schema, grants, PROJECTS row | **KEEP** |
+| `register_project.py` | Onboard a project: `ORCH_PROJ_<ID>` role, artifact schema, grants, PROJECTS row; **M4:** also creates `TEST_VISIBLE`/`TEST_HELDOUT` tables (held-out not granted to project role) | **M4 ✅** |
 | `build_push.sh`, `registry_login.sh`, `image_uri.py` | Image pipeline (derives registry host) | **KEEP** |
 | `run_job.py` | Generic SPCS job-service runner | **ADAPT** — add PAT env for the SDK (M-series) |
 | `healthcheck.py` | One-shot end-to-end health check, self-suspending | **ADAPT** — M1: also assert CLI + SDK present in image |
 | `p1_connect.py` | Connection smoke | **KEEP** (handy; healthcheck also covers it) |
-| `p14_stage_io.py` | Proof: stage I/O from container | **ADAPT** — M4: agent-produced files |
-| `p15_test_gate.py` | Proof: runner + gate (pass/fail) | **ADAPT** — M4: artifact tree |
-| `p16_loop.py` | Proof: full loop (solvable→DONE, impossible→NEEDS_HUMAN) | **ADAPT** — M5: agent worker |
-| `p16b_role_scoping.py` | Proof: loop runs least-priv as `ORCH_PROJ_<ID>` | **ADAPT** — M6: dual identity (session token + PAT) |
+| `p_m4_agent.py` | Proof: agent code artifacts — multi-file (`app.py`+`mathutil.py`)→DONE+persisted; feedback-driven convergence (unguessable sentinel, iter0 FAIL→DONE) | **M4 ✅ NEW** |
+| `p16_loop.py` | Proof: full loop (solvable→DONE, impossible→NEEDS_HUMAN); seeds tests into `TEST_VISIBLE`/`TEST_HELDOUT` | **KEEP** (agent worker) |
+| `p16b_role_scoping.py` | Proof: loop runs least-priv as `ORCH_PROJ_<ID>` | **PARKED · M6** — needs the held-out grant decision (in-container gate must read held-out under least-priv) |
+| ~~`p14_stage_io.py`~~ / ~~`p15_test_gate.py`~~ | old stage-I/O / gate proofs | **DELETED** — superseded by `p16*` + `p_m4_agent` |
 | ~~`p0_enable_idtoken.py`~~ | Enable SSO id-token caching | **RETIRED** — PAT path chosen instead |
 | ~~`p2_service.py`~~ | Phase-0 bootstrap READY service | **RETIRED** — concept dropped; healthcheck/p16 cover services |
 | ~~`p3_cortex.py`~~ | Phase-0 Cortex-from-container proof | **RETIRED** — superseded by healthcheck |
@@ -69,13 +70,16 @@ roles `ORCH_LEAD/_DEVELOPER/_TESTER/_RUNNER/_HUMAN_IN_LOOP` + `ORCH_PROJ_DEMO`;
 fixture `DEMO_PROJ.PUBLIC.SAMPLE_DATA`). Healthcheck 5/5 OK.
 
 ## Forward path
-M1 ✅ → M2 ✅ → M3 ✅ (`app/agent_worker.py` + `app/agent_env.py` wired into `generate`; visible/held-out split)
-→ **M4 (next: re-verify 1.4/1.5 — p14/p15 — with agent artifacts)** → M5 (e2e loop)
-→ M6 (run under `ORCH_PROJ_<ID>`; PAT/dual-identity dropped; consider held-out physical isolation) →
+M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ (agent code artifacts: multi-file + feedback convergence; held-out
+moved to separate tables + agent tool-sandbox as defense-in-depth) → **M5 (next: full e2e loop on the
+agent worker)** → M6 (run whole loop under `ORCH_PROJ_<ID>`; decide the held-out grant so the
+in-container gate works under least-priv; PAT/dual-identity as further defense-in-depth) →
 1.8 (TESTER generation) → Phase 2 (SPEC admission) → Phase 3 (deployment repo).
-New app modules: `agent_worker.py` (SDK worker), `agent_env.py` (shared oauth bootstrap),
+New app modules: `agent_worker.py` (SDK worker, tool-sandboxed), `agent_env.py` (shared oauth bootstrap),
 `agent_hello.py` (M2 proof), `agent_smoke.py` (M1 proof). CLI pinned `1.1.66+001753.801adc2b71d7`.
-OPEN hardening: held-out tests physically on the mounted stage the agent shell can reach — isolate later.
+RESOLVED (M4): held-out no longer on the mounted stage (separate tables + transient gate materialization);
+agent tool-sandbox blocks SQL/shell/path-escape. NOTE: the earlier "held-out leak" was a guessable-sentinel
+(`42`) test artifact, not a real exploit — isolation stands as sound defense-in-depth.
 
 ## Maintenance rule
 **Regenerate `docs/overview.html` after EVERY completed step** (Paket/M-milestone/consolidation)

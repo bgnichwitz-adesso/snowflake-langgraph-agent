@@ -65,19 +65,35 @@ Already verified this session: **egress without EAI** (re-confirm full CLI path 
   Proven: task-add→DONE via agent (structured_output); task-impossible→NEEDS_HUMAN@3. Healthcheck 6/6.
   **Two bugs found & fixed during M3:** (a) feedback leaked full pytest output incl. held-out →
   now visible-only; (b) toy "impossible" fixture was gameable by a degenerate `__eq__` → hardened to
-  typed asserts (`type(r) is int and r==N`). **OPEN (hardening, later): held-out tests physically
-  live on the mounted stage the agent's shell can reach — for a *gameable* task a clever agent could
-  read them. Fix later via no-mount/transient-fetch or a separate gate container (defense-in-depth).**
-- **M4:** re-verify 1.4 + 1.5 with agent artifacts.
+  typed asserts (`type(r) is int and r==N`).
+- **M4 ✅ (done 2026-08-28):** agent code-artifact integration proven via `scripts/p_m4_agent.py`
+  (cheap/mechanical, not a depth benchmark — that's the real use-case later). Two tasks through the
+  real agentic loop: **task-multi** (multi-file: `app.py` imports a separate `mathutil.py`) →
+  `DONE` + both files persisted on `CODE_STAGE`; **task-feedback** (required value NOT in the spec) →
+  iter0 FAIL → converges to `DONE` at iter1 via visible-test feedback (`traj=[(0,False),(1,True)]`).
+  **Held-out isolation reworked → defense-in-depth (see below); NO active exploit was ever real:**
+  - Frozen tests moved OFF the mounted stage into SEPARATE per-project tables `TEST_VISIBLE` /
+    `TEST_HELDOUT` (`register_project.py`); `orchestrator.run_tests` materializes them transiently
+    to `/tmp/gate/...` and `rmtree`s in `finally` — held-out never lands in the agent's cwd/stage/git.
+  - **Agent tool-sandbox** (`agent_worker._make_guard` + `can_use_tool`, `permission_mode="default"`,
+    `disallowed_tools=["Bash"]`): file tools only, every path jailed to cwd, no shell/SQL/network →
+    the agent can read neither `TEST_HELDOUT` (no SQL) nor `/snowflake/session/token` (no path escape).
+  - **False-positive lesson:** the earlier "CRITICAL held-out leak" (task-feedback passing at iter0)
+    was a *test artifact* — the sentinel value was `42`, which a model guesses blind. With an
+    unguessable sentinel (`6829473`) iter0 correctly FAILS. There was never a proven read-leak; the
+    table-split + tool-sandbox stand as sound defense-in-depth, not a fix for a live exploit.
 - **M5:** end-to-end loop (1.6) on the agent worker.
-- **M6:** ~~dual identity + least-priv PAT~~ **DROPPED** — M2 proved the CLI uses the internal SPCS token (single identity). Remaining M6 work: run the agent under `ORCH_PROJ_<ID>` (mechanism from 1.6b), no PAT.
+- **M6:** ~~dual identity + least-priv PAT~~ **DROPPED** — M2 proved the CLI uses the internal SPCS token (single identity). Remaining M6 work: run the whole loop under `ORCH_PROJ_<ID>` (mechanism from 1.6b). **Design point exposed by M4:** under a single least-priv identity the *in-container gate* must read `TEST_HELDOUT`, so `ORCH_PROJ_<ID>` needs `SELECT` on it — held-out protection then rests on the **tool-sandbox** (agent can't SQL), not on withholding the grant. `scripts/p16b_role_scoping.py` (least-priv proof) is therefore parked until this M6 grant decision (it seeds into the new tables but its gate can't read held-out under `ORCH_PROJ` yet). Least-priv PAT stays documented as a further defense-in-depth layer for when the agent legitimately needs shell/SQL.
 - **then 1.8** (TESTER generation) on the new base.
 
 ## Open design points (resolve in spec review, not now)
 1. ✅ **Dual identity / least privilege — RESOLVED 2026-08-27 (M2):** NO PAT, NO dual identity. The Cortex CLI authenticates with the **internal SPCS OAuth token** (connections.toml `authenticator=oauth` + `token_file_path=/snowflake/session/token`), i.e. the SAME identity as the orchestrator SQL. Least-priv = run the agent under `ORCH_PROJ_<ID>` (1.6b mechanism).
 2. ✅ **Multi-file artifact / `output_format`** — RESOLVED 2026-06-23 (see `spec/Phase1_Orchestrator_Loop.md` → "Agentischer Worker — festgelegte Details"): schema `{summary, entry_point, files[], ready}`; **no thread-resume across outer iterations** (fresh agent invocation seeded from durable state each round).
 3. **Observability** — measure whether SDK-headless auto-logs to `AI_OBSERVABILITY_EVENTS`; else our own append-only tables.
-4. **Security** — agent runs arbitrary bash (`bypassPermissions`) inside the container; bounded by container grants.
+4. ✅ **Security — TIGHTENED 2026-08-28 (M4):** agent no longer runs `bypassPermissions`. It is
+   tool-sandboxed via `can_use_tool` (SDK-managed permissions, `permission_mode="default"`):
+   file tools only, every path jailed to cwd, `Bash`/SQL/network denied. This is the primary
+   held-out protection. Residual: for real tasks that need shell/SQL, add the least-priv PAT layer.
 5. **Image size / pool start** — ~210 MB CLI tree.
 6. **PAT lifecycle** — expiry/rotation, SPCS secret vs env.
 

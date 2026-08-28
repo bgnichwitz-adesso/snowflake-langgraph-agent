@@ -63,20 +63,20 @@ spec:
             cur.execute(f"GRANT ROLE {config.RUNNER_ROLE} TO USER {user}")
             print(f"granted {config.RUNNER_ROLE} to user {user}")
 
-            # seed task + stage frozen tests (as admin)
+            # seed task + frozen tests into TEST_VISIBLE / TEST_HELDOUT (as admin).
+            # NOTE (M6): this proof runs the job as least-priv ORCH_PROJ_<ID>, which is
+            # deliberately NOT granted TEST_HELDOUT — so the in-container gate can't read
+            # held-out under least-priv. Full fix = M6 (separate gate identity for held-out).
             cur.execute(
                 f"INSERT INTO {CORE}.TASK_SPECS "
                 "(task_id, project_id, user_id, status, title, spec_text) "
                 "VALUES (%s,%s,%s,%s,%s,%s)",
                 (TASK, PROJECT, "tester", "LOCKED", TASK, SPEC_TEXT))
-            with tempfile.TemporaryDirectory() as tmp:
-                with open(os.path.join(tmp, "test_visible.py"), "w") as fh:
-                    fh.write(VISIBLE)
-                with open(os.path.join(tmp, "test_heldout.py"), "w") as fh:
-                    fh.write(HELDOUT)
-                cur.execute(f"PUT 'file://{tmp}/*.py' @{STAGE}/{TASK}/tests/ "
-                            "AUTO_COMPRESS=FALSE OVERWRITE=TRUE")
-            print("seeded + staged task-role")
+            cur.execute(f"INSERT INTO {ART}.TEST_VISIBLE (task_id, filename, content) "
+                        "VALUES (%s,%s,%s)", (TASK, "test_visible.py", VISIBLE))
+            cur.execute(f"INSERT INTO {ART}.TEST_HELDOUT (task_id, filename, content) "
+                        "VALUES (%s,%s,%s)", (TASK, "test_heldout.py", HELDOUT))
+            print("seeded task-role (spec + TEST_VISIBLE + TEST_HELDOUT)")
 
             # launch chain: RUNNER -> PROJ -> EXECUTE (owner = PROJ)
             cur.execute(f"DROP SERVICE IF EXISTS {JOB}")
@@ -105,7 +105,8 @@ spec:
             # cleanup
             cur.execute(f"REMOVE @{STAGE}/{TASK}")
             cur.execute(f"DELETE FROM {CORE}.TASK_SPECS WHERE task_id = '{TASK}'")
-            for t in ("DEV_COMMENTS", "TEST_RESULTS", "RUNS"):
+            for t in ("DEV_COMMENTS", "TEST_RESULTS", "RUNS",
+                      "TEST_VISIBLE", "TEST_HELDOUT"):
                 cur.execute(f"DELETE FROM {ART}.{t} WHERE task_id = '{TASK}'")
             cur.execute(f"DROP SERVICE IF EXISTS {JOB}")
             cur.execute(f"ALTER COMPUTE POOL {POOL} SUSPEND")
