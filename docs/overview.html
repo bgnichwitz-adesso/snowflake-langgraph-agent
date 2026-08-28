@@ -97,9 +97,12 @@
       Test-Feedback. <b>Gate-Integrität / held-out:</b> frozen Tests liegen jetzt in separaten Tabellen
       (<code>TEST_VISIBLE</code>/<code>TEST_HELDOUT</code>, nicht auf dem Stage), werden am Gate transient
       materialisiert und sofort gelöscht; der Agent ist <b>tool-gesandboxt</b> (nur Datei-Tools, cwd-gejailt,
-      kein Shell/SQL) → kann held-out weder per SQL noch übers Token-File lesen. <i>Hinweis: das früher
-      vermutete „held-out-Leck" war ein Test-Artefakt (ratbarer Sentinel 42), kein echtes Exploit — die
-      Isolation bleibt als defense-in-depth.</i> Interne Identität (kein PAT), CLI gepinnt <code>v1.1.66</code>.
+      kein Shell/SQL). <b>Verifiziert (3 Checks):</b> <code>p_m4_guard</code> (Deny-Logik 11/11: blockt
+      Bash/SQL/Session-Token/Pfade außerhalb cwd/<code>..</code>-Traversal), <code>p_m4_leak</code>
+      (held-out-only unrätbarer Wert → NEEDS_HUMAN; Guard nachweislich aktiv), <code>p_m4_agent</code>
+      (Konvergenz). <i>Ehrlich: die früheren iter0-Treffer nutzten den ratbaren Sentinel 42 → nicht
+      aussagekräftig (weder Beleg für noch gegen ein damaliges Leck); belegt ist nur, dass das
+      <b>heutige</b> Design keinen held-out-only-Wert leakt.</i> Interne Identität (kein PAT), CLI gepinnt <code>v1.1.66</code>.
       Quellen: <code>docs/COMPONENT_AUDIT.md</code>, <code>spec/Phase1_Orchestrator_Loop.md</code>, <code>docs/superpowers/specs/2026-06-28-agentic-worker-migration-design.md</code></div>
     </div>
   </section>
@@ -183,6 +186,7 @@
       <tr><td><code>run_job.py</code></td><td>Generischer SPCS-Job-Runner</td><td><span class="badge b-ok">KEEP</span></td></tr>
       <tr><td><code>healthcheck.py</code></td><td>End-to-end Check (6/6), self-suspending</td><td><span class="badge b-ok">KEEP · cortex_cli-Check (M1)</span></td></tr>
       <tr><td><code>p_m4_agent.py</code></td><td>M4-Proof: Mehrdatei→DONE+persistiert · Feedback-Konvergenz (iter0 FAIL→DONE)</td><td><span class="badge b-ok">M4 ✅ NEU</span></td></tr>
+      <tr><td><code>p_m4_guard.py</code> · <code>p_m4_leak.py</code></td><td>Sandbox-Beweise: Guard-Deny-Logik (11/11, lokal) · held-out-only→NEEDS_HUMAN (in-container)</td><td><span class="badge b-ok">M4 ✅ NEU</span></td></tr>
       <tr><td><code>p16_loop.py</code></td><td>Loop-Proof (solvable→DONE, impossible→NEEDS_HUMAN); seedet in TEST_VISIBLE/HELDOUT</td><td><span class="badge b-ok">KEEP</span></td></tr>
       <tr><td><code>p16b_role_scoping.py</code></td><td>least-priv-Lauf als <code>ORCH_PROJ_&lt;ID&gt;</code></td><td><span class="badge b-warn">PARKED · M6 (held-out-Grant-Entscheidung)</span></td></tr>
       <tr class="retired"><td><code>p14_stage_io · p15_test_gate</code></td><td>alte Stage-/Gate-Proofs</td><td><span class="badge b-retire">GELÖSCHT (M4)</span></td></tr>

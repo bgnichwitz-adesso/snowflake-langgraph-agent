@@ -98,14 +98,21 @@ def _make_guard(cwd: str):
         return ap == root or ap.startswith(root + os.sep)
 
     async def can_use_tool(tool_name, tool_input, _ctx):
+        # Diagnostic: every invocation is logged so we can SEE the guard fire
+        # (and prove the callback is reached at all) in SYSTEM$GET_SERVICE_LOGS.
         if tool_name not in _ALLOWED_TOOLS:
+            print(f"[guard] DENY tool={tool_name} reason=not-in-allowlist "
+                  f"input={str(tool_input)[:160]}", flush=True)
             return PermissionResultDeny(
                 message=f"tool '{tool_name}' is disabled for the developer agent")
         for k in _PATH_KEYS:
             v = tool_input.get(k) if isinstance(tool_input, dict) else None
             if isinstance(v, str) and v and not _within(v):
+                print(f"[guard] DENY tool={tool_name} reason=path-outside-cwd "
+                      f"path={v}", flush=True)
                 return PermissionResultDeny(
                     message=f"path outside working directory is not allowed: {v}")
+        print(f"[guard] allow tool={tool_name}", flush=True)
         return PermissionResultAllow()
 
     return can_use_tool
