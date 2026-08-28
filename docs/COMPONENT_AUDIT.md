@@ -28,7 +28,7 @@ Status legend: **KEEP** (unchanged) · **ADAPT** (changes at a milestone) ·
 | `sf.py` | Snowflake connection helper (PAT → headless) | **KEEP** |
 | `p2_infra.py` | Create DB/schema/compute pool/image repo | **KEEP** (setup) |
 | `p6_roles.py` | Workflow roles + TASK_SPECS/PROJECTS/view + grants | **KEEP** (setup) |
-| `register_project.py` | Onboard a project: `ORCH_PROJ_<ID>` role, artifact schema, grants, PROJECTS row; **M4:** also creates `TEST_VISIBLE`/`TEST_HELDOUT` tables (held-out not granted to project role) | **M4 ✅** |
+| `register_project.py` | Onboard a project: `ORCH_PROJ_<ID>` role, artifact schema, grants, PROJECTS row; creates `TEST_VISIBLE`/`TEST_HELDOUT` tables. **M6:** grants `SELECT` on BOTH to the project role (least-priv loop's in-container gate reads held-out; agent kept out by the tool-sandbox) | **M6 ✅** |
 | `build_push.sh`, `registry_login.sh`, `image_uri.py` | Image pipeline (derives registry host) | **KEEP** |
 | `run_job.py` | Generic SPCS job-service runner | **ADAPT** — add PAT env for the SDK (M-series) |
 | `healthcheck.py` | One-shot end-to-end health check, self-suspending | **ADAPT** — M1: also assert CLI + SDK present in image |
@@ -37,7 +37,7 @@ Status legend: **KEEP** (unchanged) · **ADAPT** (changes at a milestone) ·
 | `p_m4_guard.py` | Proof (local, no credits): tool-sandbox deny-logic — denies Bash/SQL/session-token/outside-cwd/`..`-traversal, allows only cwd file tools (11/11) | **M4 ✅ NEW** |
 | `p_m4_leak.py` | Proof (in-container): held-out-ONLY unguessable value → NEEDS_HUMAN. `AGENT_SANDBOX=observe` = decisive control: unblocked agent actively hunts the FS for tests (11 Bash searches) but still can't reach held-out (tables + transient gate) | **M4 ✅ NEW** |
 | `p16_loop.py` | Proof: full loop (solvable→DONE, impossible→NEEDS_HUMAN); seeds tests into `TEST_VISIBLE`/`TEST_HELDOUT` | **KEEP** (agent worker) |
-| `p16b_role_scoping.py` | Proof: loop runs least-priv as `ORCH_PROJ_<ID>` | **PARKED · M6** — needs the held-out grant decision (in-container gate must read held-out under least-priv) |
+| `p16b_role_scoping.py` | Proof: loop runs least-priv as `ORCH_PROJ_<ID>` (container owned by project role; in-container gate reads held-out via the M6 grant) → DONE | **M6 ✅** |
 | ~~`p14_stage_io.py`~~ / ~~`p15_test_gate.py`~~ | old stage-I/O / gate proofs | **DELETED** — superseded by `p16*` + `p_m4_agent` |
 | ~~`p0_enable_idtoken.py`~~ | Enable SSO id-token caching | **RETIRED** — PAT path chosen instead |
 | ~~`p2_service.py`~~ | Phase-0 bootstrap READY service | **RETIRED** — concept dropped; healthcheck/p16 cover services |
@@ -72,11 +72,11 @@ roles `ORCH_LEAD/_DEVELOPER/_TESTER/_RUNNER/_HUMAN_IN_LOOP` + `ORCH_PROJ_DEMO`;
 fixture `DEMO_PROJ.PUBLIC.SAMPLE_DATA`). Healthcheck 5/5 OK.
 
 ## Forward path
-M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ (agent code artifacts: multi-file + feedback convergence; held-out
-moved to separate tables + agent tool-sandbox as defense-in-depth) → **M5 (next: full e2e loop on the
-agent worker)** → M6 (run whole loop under `ORCH_PROJ_<ID>`; decide the held-out grant so the
-in-container gate works under least-priv; PAT/dual-identity as further defense-in-depth) →
-1.8 (TESTER generation) → Phase 2 (SPEC admission) → Phase 3 (deployment repo).
+M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ (agent code artifacts; held-out in separate tables + tool-sandbox) →
+M5 ✅ (e2e behaviours covered by M4 proofs) → M6 ✅ (whole loop runs least-priv AS `ORCH_PROJ_<ID>`;
+in-container gate reads held-out via a grant; agent kept out by the sandbox — verified incl. an
+unblocked least-priv control) → **1.8 (next: TESTER generation)** → Phase 2 (SPEC admission) →
+Phase 3 (deployment repo).
 New app modules: `agent_worker.py` (SDK worker, tool-sandboxed), `agent_env.py` (shared oauth bootstrap),
 `agent_hello.py` (M2 proof), `agent_smoke.py` (M1 proof). CLI pinned `1.1.66+001753.801adc2b71d7`.
 RESOLVED (M4) — TWO independent layers, both verified: (a) held-out off the mounted stage (separate

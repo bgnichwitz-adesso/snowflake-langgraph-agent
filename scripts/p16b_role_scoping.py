@@ -7,9 +7,7 @@ the loop log reports CURRENT_ROLE = ORCH_PROJ_DEMO and the run reaches DONE.
 
 Prereq: register_project has applied the service-execution grants (re-run it).
 """
-import os
 import sys
-import tempfile
 
 import config
 from sf import connect
@@ -64,9 +62,9 @@ spec:
             print(f"granted {config.RUNNER_ROLE} to user {user}")
 
             # seed task + frozen tests into TEST_VISIBLE / TEST_HELDOUT (as admin).
-            # NOTE (M6): this proof runs the job as least-priv ORCH_PROJ_<ID>, which is
-            # deliberately NOT granted TEST_HELDOUT — so the in-container gate can't read
-            # held-out under least-priv. Full fix = M6 (separate gate identity for held-out).
+            # M6: the job runs least-priv AS ORCH_PROJ_<ID>, which now HAS SELECT on
+            # TEST_HELDOUT (register_project) so the in-container gate can read it.
+            # Held-out stays out of the developer agent's reach via the tool-sandbox.
             cur.execute(
                 f"INSERT INTO {CORE}.TASK_SPECS "
                 "(task_id, project_id, user_id, status, title, spec_text) "
