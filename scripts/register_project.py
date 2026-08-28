@@ -141,10 +141,14 @@ def main() -> int:
                 f"GRANT INSERT, SELECT ON TABLE {art}.DEV_COMMENTS TO ROLE {role}",
                 f"GRANT INSERT, SELECT ON TABLE {art}.TEST_RESULTS TO ROLE {role}",
                 f"GRANT INSERT, SELECT ON TABLE {art}.RUNS TO ROLE {role}",
-                # VISIBLE tests: readable by the project role. HELD-OUT: deliberately
-                # NOT granted to {role} (only the owner/gate reads it) — table-level
-                # isolation so the developer agent can't read held-out tests.
+                # VISIBLE + HELD-OUT tests: both readable by the project role. Under
+                # M6 the whole loop runs least-priv AS this role, so the in-container
+                # GATE (run_tests) must read TEST_HELDOUT. Held-out is therefore kept
+                # out of the developer agent's reach by the TOOL-SANDBOX (agent_worker:
+                # no shell/SQL, cwd-jailed), NOT by withholding this grant. Verified by
+                # scripts/p_m4_leak.py (incl. least-priv): the agent can't reach held-out.
                 f"GRANT SELECT ON TABLE {art}.TEST_VISIBLE TO ROLE {role}",
+                f"GRANT SELECT ON TABLE {art}.TEST_HELDOUT TO ROLE {role}",
                 # read the task control-plane (table + current view + registry)
                 f"GRANT USAGE ON SCHEMA {config.DATABASE}.{config.SCHEMA} TO ROLE {role}",
                 f"GRANT SELECT ON TABLE {config.DATABASE}.{config.SCHEMA}.TASK_SPECS TO ROLE {role}",

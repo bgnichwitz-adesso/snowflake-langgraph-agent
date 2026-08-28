@@ -97,8 +97,22 @@ Already verified this session: **egress without EAI** (re-confirm full CLI path 
     gate materialization defeats the filesystem hunt on its own; (b) tool-sandbox blocks the hunt tool
     entirely. **Still honest:** the old stage-mounted design (removed) was never retested with an
     unguessable value, and the `42`-sentinel runs were inconclusive (a model returns 42 blind).
-- **M5:** end-to-end loop (1.6) on the agent worker.
-- **M6:** ~~dual identity + least-priv PAT~~ **DROPPED** — M2 proved the CLI uses the internal SPCS token (single identity). Remaining M6 work: run the whole loop under `ORCH_PROJ_<ID>` (mechanism from 1.6b). **Design point exposed by M4:** under a single least-priv identity the *in-container gate* must read `TEST_HELDOUT`, so `ORCH_PROJ_<ID>` needs `SELECT` on it — held-out protection then rests on the **tool-sandbox** (agent can't SQL), not on withholding the grant. `scripts/p16b_role_scoping.py` (least-priv proof) is therefore parked until this M6 grant decision (it seeds into the new tables but its gate can't read held-out under `ORCH_PROJ` yet). Least-priv PAT stays documented as a further defense-in-depth layer for when the agent legitimately needs shell/SQL.
+- **M5 ✅ (covered by M4, 2026-08-28):** the e2e loop behaviours M5 was meant to prove are already
+  demonstrated on the current image — DONE (`p_m4_agent` task-multi + task-feedback), NEEDS_HUMAN
+  (`p_m4_leak`), and solvable/contradiction (`p16_loop`). No separate work; folded into M4/M6 proofs.
+- **M6 ✅ (done 2026-08-28):** the whole loop now runs least-priv AS `ORCH_PROJ_<ID>` (1.6b chain:
+  user→ORCH_RUNNER→ORCH_PROJ→EXECUTE JOB SERVICE, service owned by the project role). **Decision
+  (single least-priv identity + held-out grant + sandbox):** under one identity the in-container gate
+  must read `TEST_HELDOUT`, so `register_project` now GRANTs `SELECT ON TEST_HELDOUT` to `ORCH_PROJ_<ID>`;
+  held-out is kept from the developer agent by the **tool-sandbox** (no shell/SQL), NOT by withholding
+  the grant. ~~dual identity + least-priv PAT~~ stays DROPPED (documented as a further layer for when
+  real tasks need shell/SQL). **Verified:** (1) `p16b_role_scoping.py` (un-parked) — container runs as
+  `ORCH_PROJ_DEMO`, gate reads held-out, task→DONE. (2) `p_m4_leak.py LEAST_PRIV=1` (enforce) — the role
+  itself now *could* SQL-read held-out, yet the sandbox holds → NEEDS_HUMAN. (3) `p_m4_leak.py
+  LEAST_PRIV=1 AGENT_SANDBOX=observe` (capstone) — an UNBLOCKED least-priv agent hunts the filesystem
+  (7 Bash `find`/`cat`, all WOULD-DENY) and **never tries SQL** against the now-readable table → still
+  NEEDS_HUMAN. **Honest caveat:** this agent doesn't attempt SQL; a future model might — but the
+  enforce sandbox denies `ExecuteSql` too (`p_m4_guard`), so the layer holds regardless.
 - **then 1.8** (TESTER generation) on the new base.
 
 ## Open design points (resolve in spec review, not now)

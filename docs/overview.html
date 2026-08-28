@@ -65,8 +65,8 @@
 </head>
 <body>
 <header>
-  <h1>Snowflake LangGraph Orchestrator <span class="badge b-ok">M4 ✅ — Agent verarbeitet Code-Artefakte</span></h1>
-  <div class="sub">Deterministischer, tabellengetriebener Code-Orchestrator auf Snowflake&nbsp;SPCS · Claude via Cortex, intern (kein Egress) · <code>main</code>&nbsp;@&nbsp;<code>feat/m4-agent-artifacts</code></div>
+  <h1>Snowflake LangGraph Orchestrator <span class="badge b-ok">M6 ✅ — Loop läuft least-priv</span></h1>
+  <div class="sub">Deterministischer, tabellengetriebener Code-Orchestrator auf Snowflake&nbsp;SPCS · Claude via Cortex, intern (kein Egress) · <code>main</code></div>
   <nav>
     <a href="#status">Status</a><a href="#loop">Loop</a><a href="#arch">Architektur</a>
     <a href="#components">Komponenten</a><a href="#roadmap">Roadmap</a>
@@ -80,8 +80,8 @@
     <div class="grid tiles">
       <div class="tile"><div class="k">Phase 0 — Bootstrap</div><div class="v">✅ abgeschlossen</div></div>
       <div class="tile"><div class="k">Phase 1 — Loop-Kern (1.0–1.6b)</div><div class="v">✅ läuft (Healthcheck 6/6)</div></div>
-      <div class="tile"><div class="k">Agentic-Worker-Umbau (M-Serie)</div><div class="v">🟢 M1–M4 ✅ · M5 als Nächstes</div></div>
-      <div class="tile"><div class="k">Nächster Schritt</div><div class="v">M5 — voller e2e-Loop auf dem Agent-Worker</div></div>
+      <div class="tile"><div class="k">Agentic-Worker-Umbau (M-Serie)</div><div class="v">🟢 M1–M6 ✅ (least-priv Loop)</div></div>
+      <div class="tile"><div class="k">Nächster Schritt</div><div class="v">1.8 — TESTER-Generierung</div></div>
       <div class="tile"><div class="k">Kosten gerade</div><div class="v">0 (Pool suspended)</div></div>
     </div>
     <div class="panel" style="margin-top:12px">
@@ -192,7 +192,7 @@
       <tr><td><code>p_m4_agent.py</code></td><td>M4-Proof: Mehrdatei→DONE+persistiert · Feedback-Konvergenz (iter0 FAIL→DONE)</td><td><span class="badge b-ok">M4 ✅ NEU</span></td></tr>
       <tr><td><code>p_m4_guard.py</code> · <code>p_m4_leak.py</code></td><td>Sandbox-Beweise: Guard-Deny-Logik (11/11, lokal) · held-out-only→NEEDS_HUMAN (in-container)</td><td><span class="badge b-ok">M4 ✅ NEU</span></td></tr>
       <tr><td><code>p16_loop.py</code></td><td>Loop-Proof (solvable→DONE, impossible→NEEDS_HUMAN); seedet in TEST_VISIBLE/HELDOUT</td><td><span class="badge b-ok">KEEP</span></td></tr>
-      <tr><td><code>p16b_role_scoping.py</code></td><td>least-priv-Lauf als <code>ORCH_PROJ_&lt;ID&gt;</code></td><td><span class="badge b-warn">PARKED · M6 (held-out-Grant-Entscheidung)</span></td></tr>
+      <tr><td><code>p16b_role_scoping.py</code></td><td>least-priv-Lauf als <code>ORCH_PROJ_&lt;ID&gt;</code>: Container = Projektrolle, Gate liest held-out via Grant → DONE</td><td><span class="badge b-ok">M6 ✅</span></td></tr>
       <tr class="retired"><td><code>p14_stage_io · p15_test_gate</code></td><td>alte Stage-/Gate-Proofs</td><td><span class="badge b-retire">GELÖSCHT (M4)</span></td></tr>
       <tr><td><code>p1_connect.py</code></td><td>Connection-Smoke</td><td><span class="badge b-ok">KEEP</span></td></tr>
       <tr class="retired"><td><code>p0_enable_idtoken · p2_service · p3_cortex</code></td><td>Phase-0 Reste</td><td><span class="badge b-retire">RETIRED</span></td></tr>
@@ -212,9 +212,9 @@
       <tr><td>M2</td><td>Container-Hello-World — Agent läuft in SPCS, internes Token, kein PAT/EAI</td><td><span class="badge b-ok">✅</span></td></tr>
       <tr><td>M3</td><td>agent_worker.py + Verdrahtung in generate(); visible/held-out getrennt</td><td><span class="badge b-ok">✅</span></td></tr>
       <tr><td>M4</td><td>Agent-Code-Artefakte: Mehrdatei + Feedback-Konvergenz; held-out in separate Tabellen + Agent-Tool-Sandbox</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td><b>M5</b></td><td><b>voller e2e-Loop auf dem Agent-Worker</b></td><td><span class="badge b-warn">◀ NÄCHSTES</span></td></tr>
-      <tr><td>M6</td><td>ganzen Loop unter <code>ORCH_PROJ_&lt;ID&gt;</code> (held-out-Grant-Entscheidung fürs In-Container-Gate)</td><td><span class="badge b-plan">geplant</span></td></tr>
-      <tr><td>1.8</td><td>TESTER-Generierung (Separation of Duties, frozen + held-out)</td><td><span class="badge b-plan">geplant</span></td></tr>
+      <tr><td>M5</td><td>e2e-Loop-Verhalten (durch M4-Proofs abgedeckt: DONE / NEEDS_HUMAN / Konvergenz)</td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td>M6</td><td>ganzer Loop least-priv als <code>ORCH_PROJ_&lt;ID&gt;</code>; In-Container-Gate liest held-out via Grant, Agent per Sandbox draußen (verifiziert inkl. unblockiertem least-priv-Kontroll-Lauf)</td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td><b>1.8</b></td><td><b>TESTER-Generierung</b> (Separation of Duties, frozen + held-out)</td><td><span class="badge b-warn">◀ NÄCHSTES</span></td></tr>
       <tr><td>Phase 2</td><td>SPEC-Admission (Judge advisory + deterministischer Verifier + HITL)</td><td><span class="badge b-plan">Spec fertig</span></td></tr>
       <tr><td>Phase 3</td><td>Deployment = deterministisches GitHub-Repo (idempotent DDL + Manifest + frozen Tests)</td><td><span class="badge b-plan">Spec fertig</span></td></tr>
     </table></div>
@@ -249,7 +249,7 @@
 
 </main>
 <div class="foot">
-  Generiert aus <code>docs/COMPONENT_AUDIT.md</code>, <code>spec/*</code> und Projekt-Memory · Stand: <code>feat/m4-agent-artifacts</code> (M4 ✅) ·
+  Generiert aus <code>docs/COMPONENT_AUDIT.md</code>, <code>spec/*</code> und Projekt-Memory · Stand: <code>main</code> (M6 ✅) ·
   <b>Regel: nach JEDEM Schritt neu generieren</b> · statisch &amp; offline öffbar.
 </div>
 </body>
