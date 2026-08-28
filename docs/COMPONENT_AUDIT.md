@@ -35,7 +35,7 @@ Status legend: **KEEP** (unchanged) · **ADAPT** (changes at a milestone) ·
 | `p1_connect.py` | Connection smoke | **KEEP** (handy; healthcheck also covers it) |
 | `p_m4_agent.py` | Proof: agent code artifacts — multi-file (`app.py`+`mathutil.py`)→DONE+persisted; feedback-driven convergence (unguessable sentinel, iter0 FAIL→DONE) | **M4 ✅ NEW** |
 | `p_m4_guard.py` | Proof (local, no credits): tool-sandbox deny-logic — denies Bash/SQL/session-token/outside-cwd/`..`-traversal, allows only cwd file tools (11/11) | **M4 ✅ NEW** |
-| `p_m4_leak.py` | Proof (in-container): held-out-ONLY unguessable value → NEEDS_HUMAN; guard confirmed wired (allow logs) | **M4 ✅ NEW** |
+| `p_m4_leak.py` | Proof (in-container): held-out-ONLY unguessable value → NEEDS_HUMAN. `AGENT_SANDBOX=observe` = decisive control: unblocked agent actively hunts the FS for tests (11 Bash searches) but still can't reach held-out (tables + transient gate) | **M4 ✅ NEW** |
 | `p16_loop.py` | Proof: full loop (solvable→DONE, impossible→NEEDS_HUMAN); seeds tests into `TEST_VISIBLE`/`TEST_HELDOUT` | **KEEP** (agent worker) |
 | `p16b_role_scoping.py` | Proof: loop runs least-priv as `ORCH_PROJ_<ID>` | **PARKED · M6** — needs the held-out grant decision (in-container gate must read held-out under least-priv) |
 | ~~`p14_stage_io.py`~~ / ~~`p15_test_gate.py`~~ | old stage-I/O / gate proofs | **DELETED** — superseded by `p16*` + `p_m4_agent` |
@@ -79,12 +79,15 @@ in-container gate works under least-priv; PAT/dual-identity as further defense-i
 1.8 (TESTER generation) → Phase 2 (SPEC admission) → Phase 3 (deployment repo).
 New app modules: `agent_worker.py` (SDK worker, tool-sandboxed), `agent_env.py` (shared oauth bootstrap),
 `agent_hello.py` (M2 proof), `agent_smoke.py` (M1 proof). CLI pinned `1.1.66+001753.801adc2b71d7`.
-RESOLVED (M4): held-out no longer on the mounted stage (separate tables + transient gate materialization);
-agent tool-sandbox blocks SQL/shell/path-escape. Verified by 3 checks: `p_m4_guard.py` (guard deny-logic
-11/11, local), `p_m4_leak.py` (held-out-only unguessable value → NEEDS_HUMAN, guard confirmed wired
-in-container), `p_m4_agent.py` (convergence). HONEST CAVEAT: the earlier "leak" runs used a guessable
-sentinel (`42`) → *inconclusive*, neither proof of a leak nor proof the old stage-mounted design was safe
-(that design is gone). What is established: the current design does not leak a held-out-only value.
+RESOLVED (M4) — TWO independent layers, both verified: (a) held-out off the mounted stage (separate
+tables + transient gate materialization) defeats a filesystem hunt on its own; (b) agent tool-sandbox
+blocks shell/SQL/path-escape. Checks: `p_m4_guard.py` (deny-logic 11/11, local), `p_m4_leak.py` enforce
+(held-out-only unguessable value → NEEDS_HUMAN, guard wired), `p_m4_leak.py AGENT_SANDBOX=observe`
+(decisive control: an UNBLOCKED agent actively hunts the FS for the tests — 11 Bash searches incl. the
+gate dir — yet still can't reach held-out), `p_m4_agent.py` (convergence). The adversarial hunt is REAL,
+not hypothetical. HONEST CAVEAT: the old stage-mounted design (removed) was never retested with an
+unguessable value; the `42`-sentinel runs were inconclusive. Established: the CURRENT design does not
+leak a held-out-only value.
 
 ## Maintenance rule
 **Regenerate `docs/overview.html` after EVERY completed step** (Paket/M-milestone/consolidation)

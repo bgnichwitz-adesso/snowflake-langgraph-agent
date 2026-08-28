@@ -97,12 +97,16 @@
       Test-Feedback. <b>Gate-Integrität / held-out:</b> frozen Tests liegen jetzt in separaten Tabellen
       (<code>TEST_VISIBLE</code>/<code>TEST_HELDOUT</code>, nicht auf dem Stage), werden am Gate transient
       materialisiert und sofort gelöscht; der Agent ist <b>tool-gesandboxt</b> (nur Datei-Tools, cwd-gejailt,
-      kein Shell/SQL). <b>Verifiziert (3 Checks):</b> <code>p_m4_guard</code> (Deny-Logik 11/11: blockt
-      Bash/SQL/Session-Token/Pfade außerhalb cwd/<code>..</code>-Traversal), <code>p_m4_leak</code>
-      (held-out-only unrätbarer Wert → NEEDS_HUMAN; Guard nachweislich aktiv), <code>p_m4_agent</code>
-      (Konvergenz). <i>Ehrlich: die früheren iter0-Treffer nutzten den ratbaren Sentinel 42 → nicht
-      aussagekräftig (weder Beleg für noch gegen ein damaliges Leck); belegt ist nur, dass das
-      <b>heutige</b> Design keinen held-out-only-Wert leakt.</i> Interne Identität (kein PAT), CLI gepinnt <code>v1.1.66</code>.
+      kein Shell/SQL). <b>Verifiziert — 2 unabhängige Schichten:</b> (a) Design (off-stage Tabellen +
+      transiente Gate-Materialisierung) besiegt eine Datei-Jagd allein; (b) Tool-Sandbox blockt sie
+      zusätzlich. Belegt durch <code>p_m4_guard</code> (Deny-Logik 11/11), <code>p_m4_leak</code>
+      (held-out-only unrätbarer Wert → NEEDS_HUMAN), <code>p_m4_leak AGENT_SANDBOX=observe</code>
+      (<b>decisive Kontrolle:</b> ein <b>unblockierter</b> Agent durchsucht aktiv das Dateisystem nach
+      den Tests — 11 Bash-Suchen inkl. Gate-Verzeichnis — erreicht held-out trotzdem nicht),
+      <code>p_m4_agent</code> (Konvergenz). <i>Ehrlich: die adversariale Jagd ist real; das alte
+      Stage-Design (entfernt) wurde nicht mit unrätbarem Wert nachgetestet, die 42-Läufe waren nicht
+      aussagekräftig — belegt ist, dass das heutige Design keinen held-out-only-Wert leakt.</i>
+      Interne Identität (kein PAT), CLI gepinnt <code>v1.1.66</code>.
       Quellen: <code>docs/COMPONENT_AUDIT.md</code>, <code>spec/Phase1_Orchestrator_Loop.md</code>, <code>docs/superpowers/specs/2026-06-28-agentic-worker-migration-design.md</code></div>
     </div>
   </section>

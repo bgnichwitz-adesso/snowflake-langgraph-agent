@@ -85,10 +85,23 @@ def _collect(result, cwd: str) -> dict:
     }
 
 
-def _make_guard(cwd: str):
-    """Per-tool allow/deny: file tools only, every path jailed to cwd."""
+# Sandbox mode: "on" (enforce, default) or "observe" (log-only, allow all — used
+# ONLY by the leak-control proof to see whether an UNBLOCKED agent would actually
+# reach held-out; never for real runs).
+SANDBOX_MODE = os.environ.get("AGENT_SANDBOX", "on")
+
+
+def _make_guard(cwd: str, mode: str = None):
+    """Per-tool allow/deny: file tools only, every path jailed to cwd.
+
+    mode="observe" logs the same DENY/allow decisions but ALLOWS everything, so a
+    control run can observe an unblocked agent's natural tool use (does it try to
+    read held-out?). mode="on" (default) enforces.
+    """
     from cortex_code_agent_sdk import PermissionResultAllow, PermissionResultDeny
 
+    mode = mode or SANDBOX_MODE
+    observe = mode == "observe"
     root = os.path.realpath(cwd)
 
     def _within(p: str) -> bool:
@@ -97,21 +110,20 @@ def _make_guard(cwd: str):
         ap = os.path.realpath(p if os.path.isabs(p) else os.path.join(root, p))
         return ap == root or ap.startswith(root + os.sep)
 
+    def _deny(tool_name, reason, detail):
+        tag = "WOULD-DENY(observe)" if observe else "DENY"
+        print(f"[guard] {tag} tool={tool_name} reason={reason} {detail}", flush=True)
+        if observe:
+            return PermissionResultAllow()
+        return PermissionResultDeny(message=f"{reason}: {tool_name}")
+
     async def can_use_tool(tool_name, tool_input, _ctx):
-        # Diagnostic: every invocation is logged so we can SEE the guard fire
-        # (and prove the callback is reached at all) in SYSTEM$GET_SERVICE_LOGS.
         if tool_name not in _ALLOWED_TOOLS:
-            print(f"[guard] DENY tool={tool_name} reason=not-in-allowlist "
-                  f"input={str(tool_input)[:160]}", flush=True)
-            return PermissionResultDeny(
-                message=f"tool '{tool_name}' is disabled for the developer agent")
+            return _deny(tool_name, "not-in-allowlist", f"input={str(tool_input)[:160]}")
         for k in _PATH_KEYS:
             v = tool_input.get(k) if isinstance(tool_input, dict) else None
             if isinstance(v, str) and v and not _within(v):
-                print(f"[guard] DENY tool={tool_name} reason=path-outside-cwd "
-                      f"path={v}", flush=True)
-                return PermissionResultDeny(
-                    message=f"path outside working directory is not allowed: {v}")
+                return _deny(tool_name, "path-outside-cwd", f"path={v}")
         print(f"[guard] allow tool={tool_name}", flush=True)
         return PermissionResultAllow()
 
@@ -130,7 +142,8 @@ async def _run_async(prompt: str, cwd: str) -> dict:
         # (allowlist + cwd path-jail). No bypass — the guard is the hard gate.
         permission_mode="default",
         can_use_tool=_make_guard(cwd),
-        disallowed_tools=["Bash"],   # belt: hard-deny shell at the flag level too
+        # belt: hard-deny shell at the flag level too (skipped in observe control)
+        disallowed_tools=([] if SANDBOX_MODE == "observe" else ["Bash"]),
         max_turns=MAX_TURNS,
         env=agent_env,
         extra_args={"no-auto-update": None},
