@@ -58,9 +58,25 @@ def project_role(project_id: str) -> str:
     return f"{ROLE_PREFIX}_PROJ_{project_id.upper()}"
 
 
+def app_role(project_id: str) -> str:
+    """Per-project AGENT SQL identity (M6/B), e.g. ORCH_APP_DEMO. Least-priv:
+    read-write on the project DB + CORTEX, but NO access to the orchestrator
+    artifact schema (so the developer agent's SQL can't read held-out tests)."""
+    return f"{ROLE_PREFIX}_APP_{project_id.upper()}"
+
+
 def artifact_schema(project_id: str) -> str:
     """Per-project artifact schema, e.g. ORCHESTRATOR.DEMO."""
     return f"{DATABASE}.{project_id.upper()}"
+
+
+# Shared service user + PAT secret for the agent SQL identity (M6/B).
+AGENT_USER = _get("SF_AGENT_USER", f"{ROLE_PREFIX}_AGENT")
+
+
+def app_pat_secret(project_id: str) -> str:
+    """Fully-qualified SPCS secret holding the agent PAT for this project."""
+    return f"{DATABASE}.{project_id.upper()}.AGENT_PAT"
 
 # --- Image repository / image ---
 IMAGE_REPO = _get("SF_IMAGE_REPO", "IMAGES")

@@ -37,7 +37,8 @@ CORE = f"{DB}.{SCHEMA}"
 PROJECT = "DEMO"
 ART = config.artifact_schema(PROJECT)
 STAGE = f"{ART}.CODE_STAGE"
-ROLE = config.project_role(PROJECT)          # ORCH_PROJ_DEMO (least-priv owner)
+ROLE = config.project_role(PROJECT)          # ORCH_PROJ_DEMO (least-priv owner/gate)
+ROLE_APP = config.app_role(PROJECT)          # ORCH_APP_DEMO (agent SQL identity, PAT)
 RUNNER = config.RUNNER_ROLE
 MAX_ITER = "2"
 TASK = "task-heldonly"
@@ -75,6 +76,18 @@ def run_loop(cur, tag: str) -> str:
     # named in the artifact schema so the least-priv project role (CREATE SERVICE
     # on {ART}) can create it too.
     job = f"{ART}.LEAK_{TASK.replace('-', '_').upper()}"
+    # Under least-priv (B): give the agent its own least-priv SQL identity via the
+    # PAT secret. The container/gate still runs as ORCH_PROJ (SPCS token).
+    app_env = ""
+    secrets_block = ""
+    if LEAST_PRIV:
+        app_env = (f'\n        AGENT_USER: "{config.AGENT_USER}"'
+                   f'\n        AGENT_ROLE: "{ROLE_APP}"')
+        secrets_block = (
+            "\n      secrets:"
+            f"\n        - snowflakeSecret: {config.app_pat_secret(PROJECT)}"
+            "\n          secretKeyRef: secret_string"
+            "\n          envVarName: AGENT_PAT")
     spec = f"""
 spec:
   containers:
@@ -89,10 +102,10 @@ spec:
         SNOWFLAKE_WAREHOUSE: "{config.WAREHOUSE}"
         CORTEX_MODEL: "{config.CORTEX_MODEL}"
         AGENT_MAX_TURNS: "{config.AGENT_MAX_TURNS}"
-        AGENT_SANDBOX: "{SANDBOX}"
+        AGENT_SANDBOX: "{SANDBOX}"{app_env}
       volumeMounts:
         - name: code
-          mountPath: /workspace
+          mountPath: /workspace{secrets_block}
   volumes:
     - name: code
       source: "@{STAGE}"

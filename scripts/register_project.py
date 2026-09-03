@@ -56,6 +56,7 @@ def main() -> int:
 
     pid = a.id.upper()
     role = config.project_role(pid)
+    app = config.app_role(pid)                     # ORCH_APP_<ID> (agent SQL id)
     art = config.artifact_schema(pid)              # ORCHESTRATOR.<ID>
     stage = f"{art}.CODE_STAGE"
     proj_db, proj_schema = a.project_db, a.project_schema
@@ -76,6 +77,12 @@ def main() -> int:
             assert_role_free_or_ours(cur, role)
             cur.execute(
                 f"CREATE ROLE IF NOT EXISTS {role} COMMENT = '{config.MANAGED_BY}'"
+            )
+            # 1b) agent SQL identity role (M6/B) — least-priv: project-DB read-write
+            #     + CORTEX, but NO orchestrator artifact schema (can't read held-out).
+            assert_role_free_or_ours(cur, app)
+            cur.execute(
+                f"CREATE ROLE IF NOT EXISTS {app} COMMENT = '{config.MANAGED_BY}'"
             )
 
             # 2) artifact schema + stage + append-only tables (DB-scoped, isolated)
@@ -170,6 +177,26 @@ def main() -> int:
                 f"GRANT ROLE {role} TO ROLE {config.RUNNER_ROLE}",
             ]
             for stmt in grants:
+                cur.execute(stmt)
+
+            # 3b) grants for the AGENT SQL role (M6/B): read-write on the PROJECT DB
+            # + warehouse + Cortex. Deliberately NO grant on {config.DATABASE} (the
+            # orchestrator artifact/control schema) — so the developer agent's SQL
+            # cannot read TEST_HELDOUT/TEST_VISIBLE/etc. Held-out isolation = RBAC.
+            app_grants = [
+                f"GRANT USAGE ON WAREHOUSE {config.WAREHOUSE} TO ROLE {app}",
+                f"GRANT USAGE ON DATABASE {proj_db} TO ROLE {app}",
+                f"GRANT USAGE ON SCHEMA {proj_db}.{proj_schema} TO ROLE {app}",
+                f"GRANT CREATE TABLE, CREATE VIEW ON SCHEMA {proj_db}.{proj_schema} TO ROLE {app}",
+                f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES "
+                f"IN SCHEMA {proj_db}.{proj_schema} TO ROLE {app}",
+                f"GRANT SELECT, INSERT, UPDATE, DELETE ON FUTURE TABLES "
+                f"IN SCHEMA {proj_db}.{proj_schema} TO ROLE {app}",
+                f"GRANT SELECT ON ALL VIEWS IN SCHEMA {proj_db}.{proj_schema} TO ROLE {app}",
+                f"GRANT SELECT ON FUTURE VIEWS IN SCHEMA {proj_db}.{proj_schema} TO ROLE {app}",
+                f"GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE {app}",
+            ]
+            for stmt in app_grants:
                 cur.execute(stmt)
 
             # 4) registry row (append-only; skip if an identical ACTIVE row exists)
