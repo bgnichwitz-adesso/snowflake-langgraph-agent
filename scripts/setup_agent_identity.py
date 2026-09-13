@@ -34,28 +34,28 @@ def main() -> int:
     ap.add_argument("--id", required=True, help="project id, e.g. DEMO")
     a = ap.parse_args()
     pid = a.id.upper()
-    app = config.app_role(pid)                    # ORCH_APP_<ID>
+    dev = config.dev_role(pid)                     # ORCH_DEV_<ID> (developer SQL id)
     proj = config.project_role(pid)               # ORCH_PROJ_<ID> (service owner)
     user = config.AGENT_USER                      # ORCH_AGENT (shared service user)
-    secret = config.app_pat_secret(pid)           # ORCHESTRATOR.<ID>.AGENT_PAT
+    secret = config.pat_secret(pid)               # ORCHESTRATOR.<ID>.AGENT_PAT
     token_name = f"PAT_{pid}"
 
     try:
         with connect() as conn:
             cur = conn.cursor()
 
-            # 0) the app role must already exist (register_project)
-            if not _rows(cur, f"SHOW ROLES LIKE '{app}'"):
-                raise RuntimeError(f"role {app} missing — run register_project first")
+            # 0) the developer role must already exist (register_project)
+            if not _rows(cur, f"SHOW ROLES LIKE '{dev}'"):
+                raise RuntimeError(f"role {dev} missing — run register_project first")
 
             # 1) shared service user (no password; PAT/keypair only), tagged
             cur.execute(f"CREATE USER IF NOT EXISTS {user} TYPE = SERVICE "
                         f"COMMENT = '{config.MANAGED_BY}'")
-            cur.execute(f"GRANT ROLE {app} TO USER {user}")
+            cur.execute(f"GRANT ROLE {dev} TO USER {user}")
 
             # 1b) Snowflake requires a network policy to mint a PAT. Scope it to THIS
             #     service user only (not the account). The PAT's real protection is
-            #     role-restriction (ORCH_APP) + expiry; the policy just satisfies the
+            #     role-restriction (ORCH_DEV) + expiry; the policy just satisfies the
             #     requirement. (For tighter scoping, replace 0.0.0.0/0 with the SPCS
             #     egress range, or switch to key-pair auth which needs no policy.)
             netpol = f"{user}_NETPOL"
@@ -72,21 +72,21 @@ def main() -> int:
             recs = _rows(
                 cur,
                 f"ALTER USER {user} ADD PROGRAMMATIC ACCESS TOKEN {token_name} "
-                f"ROLE_RESTRICTION = '{app}' DAYS_TO_EXPIRY = {DAYS_TO_EXPIRY}")
+                f"ROLE_RESTRICTION = '{dev}' DAYS_TO_EXPIRY = {DAYS_TO_EXPIRY}")
             rec = recs[0] if recs else {}
             pat = rec.get("token_secret") or rec.get("token") or rec.get("secret")
             if not pat:
                 raise RuntimeError(f"could not read PAT secret from result: {rec}")
 
-            # 3) store as an SPCS secret in the artifact schema (ORCH_APP can't reach
+            # 3) store as an SPCS secret in the artifact schema (ORCH_DEV can't reach
             #    it; the service owner ORCH_PROJ gets USAGE to mount it)
             cur.execute(f"CREATE OR REPLACE SECRET {secret} TYPE = GENERIC_STRING "
                         f"SECRET_STRING = '{pat}'")
             cur.execute(f"GRANT USAGE ON SECRET {secret} TO ROLE {proj}")
 
             # 4) evidence (never print the PAT)
-            print(f"  service user : {user} (role {app} granted)")
-            print(f"  PAT          : {token_name} role-restricted={app} "
+            print(f"  service user : {user} (role {dev} granted)")
+            print(f"  PAT          : {token_name} role-restricted={dev} "
                   f"expiry={DAYS_TO_EXPIRY}d (secret hidden)")
             print(f"  secret       : {secret} (USAGE -> {proj})")
             toks = _rows(cur, f"SHOW USER PROGRAMMATIC ACCESS TOKENS FOR USER {user}")

@@ -38,7 +38,7 @@ PROJECT = "DEMO"
 ART = config.artifact_schema(PROJECT)
 STAGE = f"{ART}.CODE_STAGE"
 ROLE = config.project_role(PROJECT)          # ORCH_PROJ_DEMO (least-priv owner/gate)
-ROLE_APP = config.app_role(PROJECT)          # ORCH_APP_DEMO (agent SQL identity, PAT)
+ROLE_APP = config.dev_role(PROJECT)          # ORCH_DEV_DEMO (developer SQL identity, PAT)
 RUNNER = config.RUNNER_ROLE
 MAX_ITER = "2"
 TASK = "task-heldonly"
@@ -85,7 +85,7 @@ def run_loop(cur, tag: str) -> str:
                    f'\n        AGENT_ROLE: "{ROLE_APP}"')
         secrets_block = (
             "\n      secrets:"
-            f"\n        - snowflakeSecret: {config.app_pat_secret(PROJECT)}"
+            f"\n        - snowflakeSecret: {config.pat_secret(PROJECT)}"
             "\n          secretKeyRef: secret_string"
             "\n          envVarName: AGENT_PAT")
     spec = f"""

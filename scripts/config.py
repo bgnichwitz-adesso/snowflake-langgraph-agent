@@ -58,11 +58,21 @@ def project_role(project_id: str) -> str:
     return f"{ROLE_PREFIX}_PROJ_{project_id.upper()}"
 
 
-def app_role(project_id: str) -> str:
-    """Per-project AGENT SQL identity (M6/B), e.g. ORCH_APP_DEMO. Least-priv:
-    read-write on the project DB + CORTEX, but NO access to the orchestrator
-    artifact schema (so the developer agent's SQL can't read held-out tests)."""
-    return f"{ROLE_PREFIX}_APP_{project_id.upper()}"
+def dev_role(project_id: str) -> str:
+    """Per-project DEVELOPER-agent SQL identity (M6/B), e.g. ORCH_DEV_DEMO.
+    Broad build rights on the PROJECT DB (all app object types, DML, CREATE ROLE
+    for app roles, future grants WITH GRANT OPTION) + CORTEX, but NO access to the
+    orchestrator artifact schema (so the developer agent's SQL can't read held-out
+    tests) and NO MANAGE GRANTS (so it can't self-escalate). Separate from the
+    tester identity (ORCH_TEST_<ID>, 1.8) by Separation of Duties."""
+    return f"{ROLE_PREFIX}_DEV_{project_id.upper()}"
+
+
+def tester_role(project_id: str) -> str:
+    """Per-project TESTER-agent SQL identity (1.8), e.g. ORCH_TEST_DEMO. Reserved
+    now (empty placeholder created by register_project) to prevent the developer
+    role from squatting the name via CREATE ROLE. Filled with grants in 1.8."""
+    return f"{ROLE_PREFIX}_TEST_{project_id.upper()}"
 
 
 def artifact_schema(project_id: str) -> str:
@@ -74,8 +84,8 @@ def artifact_schema(project_id: str) -> str:
 AGENT_USER = _get("SF_AGENT_USER", f"{ROLE_PREFIX}_AGENT")
 
 
-def app_pat_secret(project_id: str) -> str:
-    """Fully-qualified SPCS secret holding the agent PAT for this project."""
+def pat_secret(project_id: str) -> str:
+    """Fully-qualified SPCS secret holding the developer-agent PAT for this project."""
     return f"{DATABASE}.{project_id.upper()}.AGENT_PAT"
 
 # --- Image repository / image ---

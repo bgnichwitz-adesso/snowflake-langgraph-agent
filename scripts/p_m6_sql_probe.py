@@ -21,7 +21,7 @@ PROJECT = "DEMO"
 ART = config.artifact_schema(PROJECT)
 STAGE = f"{ART}.CODE_STAGE"
 ROLE = config.project_role(PROJECT)          # ORCH_PROJ_DEMO (owner/gate)
-ROLE_APP = config.app_role(PROJECT)          # ORCH_APP_DEMO (agent SQL identity)
+ROLE_APP = config.dev_role(PROJECT)          # ORCH_DEV_DEMO (developer SQL identity)
 RUNNER = config.RUNNER_ROLE
 MAX_ITER = "2"
 TASK = "task-sqlprobe"
@@ -62,7 +62,7 @@ spec:
         - name: code
           mountPath: /workspace
       secrets:
-        - snowflakeSecret: {config.app_pat_secret(PROJECT)}
+        - snowflakeSecret: {config.pat_secret(PROJECT)}
           secretKeyRef: secret_string
           envVarName: AGENT_PAT
   volumes:
