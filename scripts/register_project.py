@@ -172,8 +172,11 @@ def main() -> int:
                 # out of the developer agent's reach by the TOOL-SANDBOX (agent_worker:
                 # no shell/SQL, cwd-jailed), NOT by withholding this grant. Verified by
                 # scripts/p_m4_leak.py (incl. least-priv): the agent can't reach held-out.
-                f"GRANT SELECT ON TABLE {art}.TEST_VISIBLE TO ROLE {role}",
-                f"GRANT SELECT ON TABLE {art}.TEST_HELDOUT TO ROLE {role}",
+                # Form A: the in-container orchestrator (ORCH_PROJ) inserts the TESTER
+                # job's output into these tables (ensure_tests does DELETE+INSERT) AND
+                # reads them for the gate → needs INSERT/SELECT/DELETE on both.
+                f"GRANT INSERT, SELECT, DELETE ON TABLE {art}.TEST_VISIBLE TO ROLE {role}",
+                f"GRANT INSERT, SELECT, DELETE ON TABLE {art}.TEST_HELDOUT TO ROLE {role}",
                 # read the task control-plane (table + current view + registry)
                 f"GRANT USAGE ON SCHEMA {config.DATABASE}.{config.SCHEMA} TO ROLE {role}",
                 f"GRANT SELECT ON TABLE {config.DATABASE}.{config.SCHEMA}.TASK_SPECS TO ROLE {role}",
@@ -301,6 +304,11 @@ def main() -> int:
                 f"GRANT CREATE SERVICE ON SCHEMA {xchg_schema} TO ROLE {tester}",
                 f"GRANT READ, WRITE ON STAGE {xchg_stage} TO ROLE {tester}",
                 f"GRANT ROLE {tester} TO ROLE {config.RUNNER_ROLE}",
+                # Form A: the in-container orchestrator (ORCH_PROJ) launches the DEV and
+                # TESTER child jobs by USE ROLE-ing into them (downward-safe: ORCH_DEV/
+                # ORCH_TEST still cannot assume ORCH_PROJ, so held-out stays isolated).
+                f"GRANT ROLE {dev} TO ROLE {role}",
+                f"GRANT ROLE {tester} TO ROLE {role}",
             ]
             t_failed = []
             for stmt in tester_grants:

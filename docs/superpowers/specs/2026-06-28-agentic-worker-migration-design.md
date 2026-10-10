@@ -139,7 +139,17 @@ Already verified this session: **egress without EAI** (re-confirm full CLI path 
   fills the reserved `ORCH_TEST_<ID>` role; `agent_worker.run()` gained a `system`/`closing` override.
   **Verified (DEMO):** the tester wrote representative visible tests + genuine held-out edge cases
   (large numbers, commutativity) from spec alone; the `ORCH_DEV` loop then solved them → DONE. Human
-  review of generated tests before "frozen" is deferred to Phase 2 (SPEC admission). Next: Phase 2.
+  review of generated tests before "frozen" is deferred to Phase 2 (SPEC admission).
+- **Form A ✅ (done 2026-10-10) — in-container LangGraph loop restored (architecture principle).**
+  Form B (host-driven plain-Python loop) was REVERTED per the non-negotiable principle: the loop MUST
+  run in-container AND in LangGraph. `app/orchestrator.py` (LangGraph `StateGraph`, runs as `ORCH_PROJ`)
+  is the active loop again; nodes launch CHILD SPCS jobs via **nested `EXECUTE JOB SERVICE`** (proven:
+  `scripts/p_a_nested_probe.py`). `ensure_tests`→nested ORCH_TEST, `generate`→nested ORCH_DEV, gate
+  in-container. Thin launcher `scripts/run.py` (no loop). Removed `run_loop.py`/`run_tester.py`. Verified
+  e2e (DEMO, task-tgen) → DONE. **LangGraph is the right tool (researched):** MIT, free commercial,
+  in-container; no free tool bundles "LangGraph + native container nodes + UI" in SPCS (Argo/Flyte are
+  K8s), so custom LangGraph nodes launching SPCS jobs is the fit. **Next = UI/monitoring**
+  (Streamlit-in-Snowflake over the append-only tables, egress-free; Langfuse self-hosted optional) + Phase 2.
 
 ## Open design points (resolve in spec review, not now)
 1. ✅ **Dual identity / least privilege — RESOLVED 2026-08-27 (M2):** NO PAT, NO dual identity. The Cortex CLI authenticates with the **internal SPCS OAuth token** (connections.toml `authenticator=oauth` + `token_file_path=/snowflake/session/token`), i.e. the SAME identity as the orchestrator SQL. Least-priv = run the agent under `ORCH_PROJ_<ID>` (1.6b mechanism).

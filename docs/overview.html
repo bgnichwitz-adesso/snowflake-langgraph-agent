@@ -65,7 +65,7 @@
 </head>
 <body>
 <header>
-  <h1>Snowflake LangGraph Orchestrator <span class="badge b-ok">1.8 ✅ — Tester &amp; Developer getrennt (SoD)</span></h1>
+  <h1>Snowflake LangGraph Orchestrator <span class="badge b-ok">Form A ✅ — In-Container LangGraph-Loop + Container-Nodes</span></h1>
   <div class="sub">Deterministischer, tabellengetriebener Code-Orchestrator auf Snowflake&nbsp;SPCS · Claude via Cortex, intern (kein Egress) · <code>main</code></div>
   <nav>
     <a href="#status">Status</a><a href="#loop">Loop</a><a href="#arch">Architektur</a>
@@ -81,7 +81,7 @@
       <div class="tile"><div class="k">Phase 0 — Bootstrap</div><div class="v">✅ abgeschlossen</div></div>
       <div class="tile"><div class="k">Phase 1 — Loop-Kern (1.0–1.6b)</div><div class="v">✅ läuft (Healthcheck 6/6)</div></div>
       <div class="tile"><div class="k">Agentic-Worker-Umbau (M-Serie)</div><div class="v">🟢 M1–M6 ✅ + M6/B ✅ (Agent-SQL als ORCH_DEV)</div></div>
-      <div class="tile"><div class="k">Nächster Schritt</div><div class="v">Phase 2 — SPEC-Admission (inkl. Test-Review)</div></div>
+      <div class="tile"><div class="k">Nächster Schritt</div><div class="v">UI/Monitoring (Streamlit-in-Snowflake) + Phase 2</div></div>
       <div class="tile"><div class="k">Kosten gerade</div><div class="v">0 (Pool suspended)</div></div>
     </div>
     <div class="panel" style="margin-top:12px">
@@ -214,8 +214,9 @@
       <tr><td>M4</td><td>Agent-Code-Artefakte: Mehrdatei + Feedback-Konvergenz; held-out in separate Tabellen + Agent-Tool-Sandbox</td><td><span class="badge b-ok">✅</span></td></tr>
       <tr><td>M5</td><td>e2e-Loop-Verhalten (durch M4-Proofs abgedeckt: DONE / NEEDS_HUMAN / Konvergenz)</td><td><span class="badge b-ok">✅</span></td></tr>
       <tr><td>M6</td><td>ganzer Loop least-priv als <code>ORCH_PROJ_&lt;ID&gt;</code>; In-Container-Gate liest held-out via Grant, Agent per Sandbox draußen (verifiziert inkl. unblockiertem least-priv-Kontroll-Lauf)</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td>M6/B</td><td>Agent baut &amp; testet <b>SQL als <code>ORCH_DEV</code></b> in eigenem SPCS-Job (eigenes OAuth-Token, kein PAT); Host-Loop <code>run_loop.py</code>, Exchange-Stage; held-out per RBAC unerreichbar</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td>1.8</td><td><code>ORCH_TEST</code>-Agent schreibt frozen Tests (visible+held-out) aus der Spec; getrennt vom Developer (SoD); <code>tester_job.py</code>+<code>run_tester.py</code></td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td>M6/B</td><td>Agent baut &amp; testet <b>SQL als <code>ORCH_DEV</code></b> in eigenem SPCS-Job (eigenes OAuth-Token, kein PAT); Exchange-Stage; held-out per RBAC unerreichbar</td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td>1.8</td><td><code>ORCH_TEST</code>-Agent schreibt frozen Tests (visible+held-out) aus der Spec; getrennt vom Developer (SoD)</td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td><b>Form A</b></td><td><b>In-Container-LangGraph-Loop wiederhergestellt</b> (<code>orchestrator.py</code>): Nodes starten nested <code>ORCH_TEST</code>/<code>ORCH_DEV</code>-Jobs; Launcher <code>run.py</code>; Host-Loop verworfen. Container + LangGraph, kein Host-Loop</td><td><span class="badge b-ok">✅</span></td></tr>
       <tr><td><b>Phase 2</b></td><td><b>SPEC-Admission</b> (Judge advisory + deterministischer Verifier + HITL; Review der generierten Tests vor „frozen")</td><td><span class="badge b-warn">◀ NÄCHSTES · Spec fertig</span></td></tr>
       <tr><td>Phase 3</td><td>Deployment = deterministisches GitHub-Repo (idempotent DDL + Manifest + frozen Tests)</td><td><span class="badge b-plan">Spec fertig</span></td></tr>
     </table></div>
@@ -250,7 +251,7 @@
 
 </main>
 <div class="foot">
-  Generiert aus <code>docs/COMPONENT_AUDIT.md</code>, <code>spec/*</code> und Projekt-Memory · Stand: <code>main</code> (1.8 ✅) ·
+  Generiert aus <code>docs/COMPONENT_AUDIT.md</code>, <code>spec/*</code> und Projekt-Memory · Stand: <code>main</code> (Form A ✅) ·
   <b>Regel: nach JEDEM Schritt neu generieren</b> · statisch &amp; offline öffbar.
 </div>
 </body>

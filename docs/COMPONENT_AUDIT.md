@@ -11,7 +11,7 @@ Status legend: **KEEP** (unchanged) · **ADAPT** (changes at a milestone) ·
 ## Container code (`app/`)
 | File | Purpose | Status |
 |---|---|---|
-| `orchestrator.py` | In-container LangGraph loop (1.6/1.6b) | **LEGACY** — superseded by the host-driven `scripts/run_loop.py` (M6/B, Form B); kept for reference |
+| `orchestrator.py` | **ACTIVE in-container LangGraph loop (Form A):** `ensure_tests`(nested ORCH_TEST)→`generate`(nested ORCH_DEV)→`run_tests`→`gate`; launches child SPCS jobs via nested EXECUTE JOB SERVICE | **Form A ✅** |
 | `agent_job.py` | DEV-job entrypoint (M6/B): runs AS `ORCH_DEV` in its own SPCS job; reads spec from the exchange stage, runs the tool-sandboxed agent (file tools + SQL, no Bash), writes artifact back | **M6/B ✅ NEW** |
 | `tester_job.py` | TESTER-job entrypoint (1.8): runs AS `ORCH_TEST`; authors `test_visible.py`+`test_heldout.py` from the spec, writes them to the exchange stage (SoD: no build) | **1.8 ✅ NEW** |
 | `gate.py` | PASS/FAIL on exit code only — sole "done" authority | **KEEP** |
@@ -31,8 +31,9 @@ Status legend: **KEEP** (unchanged) · **ADAPT** (changes at a milestone) ·
 | `p2_infra.py` | Create DB/schema/compute pool/image repo | **KEEP** (setup) |
 | `p6_roles.py` | Workflow roles + TASK_SPECS/PROJECTS/view + grants | **KEEP** (setup) |
 | `register_project.py` | Onboard a project: roles `ORCH_PROJ_<ID>` (gate), `ORCH_DEV_<ID>` (dev build+SQL), reserved `ORCH_TEST_<ID>`; artifact schema + `TEST_VISIBLE`/`TEST_HELDOUT`; **M6/B:** exchange schema `<ID>_XCHG` + stage (cross-granted both), ORCH_DEV build grants + service-execution | **M6/B ✅** |
-| `run_loop.py` | **Host/runner-driven loop (Form B):** launch DEV job (ORCH_DEV) → pull artifact from exchange stage → gate as ORCH_PROJ (held-out) → RUNS | **M6/B ✅ NEW** |
-| `run_tester.py` | **Host step (1.8):** launch TESTER job (ORCH_TEST) → read generated test files → insert into `TEST_VISIBLE`/`TEST_HELDOUT` (host-mediated). Run before `run_loop.py` | **1.8 ✅ NEW** |
+| `run.py` | **Thin Form A launcher:** EXECUTE JOB SERVICE the in-container orchestrator (RUNNER→PROJ) and wait; the LangGraph loop runs inside (no host loop) | **Form A ✅ NEW** |
+| `p_a_nested_probe.py` | Proof: a container (ORCH_PROJ) can launch a child job (ORCH_DEV) nested + block + read result → Form A viable | **Form A ✅ NEW** |
+| ~~`run_loop.py` / `run_tester.py` / `p_m6_formb.py`~~ | host-driven loop (Form B) | **DELETED** — reverted; loop is back in-container (Form A) |
 | `build_push.sh`, `registry_login.sh`, `image_uri.py` | Image pipeline (derives registry host) | **KEEP** |
 | `run_job.py` | Generic SPCS job-service runner | **ADAPT** — add PAT env for the SDK (M-series) |
 | `healthcheck.py` | One-shot end-to-end health check, self-suspending | **ADAPT** — M1: also assert CLI + SDK present in image |
@@ -82,11 +83,11 @@ M5 ✅ → M6 ✅ (in-container loop least-priv) → **M6/B ✅ (agent SQL via i
 host-driven loop `run_loop.py`; held-out unreachable by RBAC; no PAT — network policy blocks PAT from
 SPCS, the OAuth token is exempt)** → **1.8 (next: TESTER generation, role `ORCH_TEST_<ID>` reserved)** →
 Phase 2 (SPEC admission) → Phase 3 (deployment repo).
-**1.8 ✅** — TESTER agent (`ORCH_TEST_<ID>`) authors frozen visible+held-out tests from the spec
-(SoD); `tester_job.py` + `run_tester.py`. **NEXT = Phase 2 (SPEC admission)**, incl. human review of
-generated tests before they are frozen.
-M6/B note: the gate runs host-side (host needs `pytest`); a dedicated gate container is a later
-hardening; `orchestrator.py`/`p16*` remain as the legacy in-container path.
+**1.8 ✅** — TESTER agent (`ORCH_TEST_<ID>`) authors frozen visible+held-out tests from the spec (SoD).
+**Form A ✅ (2026-10-10)** — the loop is back **in-container + LangGraph** (`orchestrator.py`), launching
+nested ORCH_TEST/ORCH_DEV child jobs; thin launcher `run.py`; host loop reverted. Gate runs in-container
+(image has pytest). **NEXT = UI/monitoring** (Streamlit-in-Snowflake over append-only tables, egress-free;
+Langfuse self-hosted optional) + **Phase 2 (SPEC admission)** incl. human review of generated tests.
 New app modules: `agent_worker.py` (SDK worker, tool-sandboxed), `agent_env.py` (shared oauth bootstrap),
 `agent_hello.py` (M2 proof), `agent_smoke.py` (M1 proof). CLI pinned `1.1.66+001753.801adc2b71d7`.
 RESOLVED (M4) — TWO independent layers, both verified: (a) held-out off the mounted stage (separate
