@@ -11,8 +11,15 @@ agent SQL identity. Designed with Cortex Code (COCO) on 2026-09-13, implemented 
 | `ORCH_DEV_<ID>` | **developer** agent — builds the Snowflake app | **never** | read-write (broad) | **yes** (app roles) |
 | `ORCH_TEST_<ID>` | **tester** agent — writes tests incl. held-out (**1.8**) | **write** | read | (1.8) |
 
-The developer runs SQL as `ORCH_DEV_<ID>` via a role-restricted PAT (SPCS secret,
-mounted as `AGENT_PAT`); the container/gate keeps the SPCS OAuth token = `ORCH_PROJ_<ID>`.
+**How the developer runs as `ORCH_DEV_<ID>` (M6/B, Form B — NO PAT):** the developer agent
+runs in its OWN SPCS job **owned by `ORCH_DEV_<ID>`**, authenticating with that job's internal
+SPCS OAuth token. (The PAT approach was dropped: the account network policy IP-blocks PAT logins
+from the SPCS egress, while the internal OAuth token is exempt — both proven.) The host-driven
+loop (`scripts/run_loop.py`) launches the DEV job, which writes its artifact to a dedicated
+exchange stage (`ORCHESTRATOR.<ID>_XCHG.AGENT_STAGE`, cross-granted to `ORCH_DEV`+`ORCH_PROJ`);
+the host then runs the gate as `ORCH_PROJ_<ID>` (held-out materialized host-side). Held-out is
+unreachable by the developer purely by RBAC: `ORCH_DEV` has no access to the artifact schema and
+held-out never enters the dev job.
 
 ## What the developer role CAN do (maximal build capability, project-scoped)
 - `USAGE` on the project DB/schema + warehouse; `CORTEX_USER`.

@@ -65,7 +65,7 @@
 </head>
 <body>
 <header>
-  <h1>Snowflake LangGraph Orchestrator <span class="badge b-ok">M6 ✅ — Loop läuft least-priv</span></h1>
+  <h1>Snowflake LangGraph Orchestrator <span class="badge b-ok">M6/B ✅ — Agent baut &amp; testet SQL als ORCH_DEV</span></h1>
   <div class="sub">Deterministischer, tabellengetriebener Code-Orchestrator auf Snowflake&nbsp;SPCS · Claude via Cortex, intern (kein Egress) · <code>main</code></div>
   <nav>
     <a href="#status">Status</a><a href="#loop">Loop</a><a href="#arch">Architektur</a>
@@ -80,7 +80,7 @@
     <div class="grid tiles">
       <div class="tile"><div class="k">Phase 0 — Bootstrap</div><div class="v">✅ abgeschlossen</div></div>
       <div class="tile"><div class="k">Phase 1 — Loop-Kern (1.0–1.6b)</div><div class="v">✅ läuft (Healthcheck 6/6)</div></div>
-      <div class="tile"><div class="k">Agentic-Worker-Umbau (M-Serie)</div><div class="v">🟢 M1–M6 ✅ (least-priv Loop)</div></div>
+      <div class="tile"><div class="k">Agentic-Worker-Umbau (M-Serie)</div><div class="v">🟢 M1–M6 ✅ + M6/B ✅ (Agent-SQL als ORCH_DEV)</div></div>
       <div class="tile"><div class="k">Nächster Schritt</div><div class="v">1.8 — TESTER-Generierung</div></div>
       <div class="tile"><div class="k">Kosten gerade</div><div class="v">0 (Pool suspended)</div></div>
     </div>
@@ -214,7 +214,8 @@
       <tr><td>M4</td><td>Agent-Code-Artefakte: Mehrdatei + Feedback-Konvergenz; held-out in separate Tabellen + Agent-Tool-Sandbox</td><td><span class="badge b-ok">✅</span></td></tr>
       <tr><td>M5</td><td>e2e-Loop-Verhalten (durch M4-Proofs abgedeckt: DONE / NEEDS_HUMAN / Konvergenz)</td><td><span class="badge b-ok">✅</span></td></tr>
       <tr><td>M6</td><td>ganzer Loop least-priv als <code>ORCH_PROJ_&lt;ID&gt;</code>; In-Container-Gate liest held-out via Grant, Agent per Sandbox draußen (verifiziert inkl. unblockiertem least-priv-Kontroll-Lauf)</td><td><span class="badge b-ok">✅</span></td></tr>
-      <tr><td><b>1.8</b></td><td><b>TESTER-Generierung</b> (Separation of Duties, frozen + held-out)</td><td><span class="badge b-warn">◀ NÄCHSTES</span></td></tr>
+      <tr><td>M6/B</td><td>Agent baut &amp; testet <b>SQL als <code>ORCH_DEV</code></b> in eigenem SPCS-Job (eigenes OAuth-Token, kein PAT); Host-Loop <code>run_loop.py</code>, Exchange-Stage; held-out per RBAC unerreichbar</td><td><span class="badge b-ok">✅</span></td></tr>
+      <tr><td><b>1.8</b></td><td><b>TESTER-Generierung</b> (Separation of Duties, frozen + held-out; Rolle <code>ORCH_TEST_&lt;ID&gt;</code> reserviert)</td><td><span class="badge b-warn">◀ NÄCHSTES</span></td></tr>
       <tr><td>Phase 2</td><td>SPEC-Admission (Judge advisory + deterministischer Verifier + HITL)</td><td><span class="badge b-plan">Spec fertig</span></td></tr>
       <tr><td>Phase 3</td><td>Deployment = deterministisches GitHub-Repo (idempotent DDL + Manifest + frozen Tests)</td><td><span class="badge b-plan">Spec fertig</span></td></tr>
     </table></div>
@@ -249,7 +250,7 @@
 
 </main>
 <div class="foot">
-  Generiert aus <code>docs/COMPONENT_AUDIT.md</code>, <code>spec/*</code> und Projekt-Memory · Stand: <code>main</code> (M6 ✅) ·
+  Generiert aus <code>docs/COMPONENT_AUDIT.md</code>, <code>spec/*</code> und Projekt-Memory · Stand: <code>feat/m6b-agent-sql-identity</code> (M6/B ✅) ·
   <b>Regel: nach JEDEM Schritt neu generieren</b> · statisch &amp; offline öffbar.
 </div>
 </body>

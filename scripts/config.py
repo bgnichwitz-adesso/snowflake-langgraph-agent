@@ -80,10 +80,6 @@ def artifact_schema(project_id: str) -> str:
     return f"{DATABASE}.{project_id.upper()}"
 
 
-# Shared service user + PAT secret for the agent SQL identity (M6/B).
-AGENT_USER = _get("SF_AGENT_USER", f"{ROLE_PREFIX}_AGENT")
-
-
 def exchange_schema(project_id: str) -> str:
     """Neutral artifact-exchange schema (M6/B), e.g. ORCHESTRATOR.DEMO_XCHG. Holds
     only the exchange stage (no held-out) so the DEV-job role ORCH_DEV can share
