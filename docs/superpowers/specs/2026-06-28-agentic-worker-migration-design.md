@@ -131,7 +131,15 @@ Already verified this session: **egress without EAI** (re-confirm full CLI path 
   task-feedback→iter0 FAIL then DONE (host-side feedback convergence), task-heldonly→NEEDS_HUMAN
   (held-out unreachable by ORCH_DEV). NOTE: the gate runs host-side (host needs `pytest`); a dedicated
   gate container is a later hardening. The in-container `orchestrator.py` loop remains as legacy.
-- **then 1.8** (TESTER generation) on the new base.
+- **1.8 ✅ (done 2026-10-10) — TESTER generation (Separation of Duties):** an `ORCH_TEST_<ID>`
+  agent AUTHORS the frozen tests (visible + held-out) from the spec, in its OWN SPCS job (Form B;
+  own OAuth token, tool-sandboxed). It has project-DB read + CORTEX + exchange RW, but **no build
+  rights and no artifact-schema write** — the host inserts the two files into `TEST_VISIBLE`/
+  `TEST_HELDOUT` (host-mediated). New: `app/tester_job.py`, `scripts/run_tester.py`; `register_project`
+  fills the reserved `ORCH_TEST_<ID>` role; `agent_worker.run()` gained a `system`/`closing` override.
+  **Verified (DEMO):** the tester wrote representative visible tests + genuine held-out edge cases
+  (large numbers, commutativity) from spec alone; the `ORCH_DEV` loop then solved them → DONE. Human
+  review of generated tests before "frozen" is deferred to Phase 2 (SPEC admission). Next: Phase 2.
 
 ## Open design points (resolve in spec review, not now)
 1. ✅ **Dual identity / least privilege — RESOLVED 2026-08-27 (M2):** NO PAT, NO dual identity. The Cortex CLI authenticates with the **internal SPCS OAuth token** (connections.toml `authenticator=oauth` + `token_file_path=/snowflake/session/token`), i.e. the SAME identity as the orchestrator SQL. Least-priv = run the agent under `ORCH_PROJ_<ID>` (1.6b mechanism).
