@@ -59,6 +59,12 @@ def main() -> int:
     dev = config.dev_role(pid)                     # ORCH_DEV_<ID> (developer SQL id)
     tester = config.tester_role(pid)              # ORCH_TEST_<ID> (reserved, 1.8)
     art = config.artifact_schema(pid)              # ORCHESTRATOR.<ID>
+    # Dedicated artifact-EXCHANGE area (M6/B): a neutral schema + stage that BOTH
+    # the gate role (ORCH_PROJ) and the developer-job role (ORCH_DEV) can read/write.
+    # Kept OUT of the artifact schema {art} so ORCH_DEV never gets USAGE where
+    # held-out lives. The DEV job writes its artifact here; the host loop reads it.
+    xchg_schema = f"{config.DATABASE}.{pid}_XCHG"   # ORCHESTRATOR.<ID>_XCHG
+    xchg_stage = f"{xchg_schema}.AGENT_STAGE"
     stage = f"{art}.CODE_STAGE"
     proj_db, proj_schema = a.project_db, a.project_schema
     projects = f"{config.DATABASE}.{config.SCHEMA}.PROJECTS"
@@ -98,6 +104,9 @@ def main() -> int:
             ddl = [
                 f"CREATE SCHEMA IF NOT EXISTS {art}",
                 f"CREATE STAGE IF NOT EXISTS {stage}",
+                # dedicated exchange area (neutral; no held-out here)
+                f"CREATE SCHEMA IF NOT EXISTS {xchg_schema}",
+                f"CREATE STAGE IF NOT EXISTS {xchg_stage}",
                 f"""CREATE TABLE IF NOT EXISTS {art}.DEV_COMMENTS (
                     task_id    STRING NOT NULL,
                     iteration  INTEGER NOT NULL DEFAULT 0,
@@ -182,6 +191,9 @@ def main() -> int:
                 f"GRANT SELECT ON ALL TABLES IN SCHEMA {proj_db}.{proj_schema} TO ROLE {role}",
                 # allow the role to call Cortex (the loop generates under it)
                 f"GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE {role}",
+                # exchange area: the gate/host reads the DEV job's artifact here
+                f"GRANT USAGE ON SCHEMA {xchg_schema} TO ROLE {role}",
+                f"GRANT READ, WRITE ON STAGE {xchg_stage} TO ROLE {role}",
                 # let the runner assume this project role
                 f"GRANT ROLE {role} TO ROLE {config.RUNNER_ROLE}",
             ]
@@ -232,6 +244,19 @@ def main() -> int:
                 # above, so their names can't be squatted).
                 f"GRANT CREATE ROLE ON ACCOUNT TO ROLE {dev}",
                 f"GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE {dev}",
+                # --- M6/B: run the DEV agent as its OWN SPCS job (owns an exempt
+                #     SPCS token as ORCH_DEV; no PAT). Service-execution rights +
+                #     the exchange area (read input / write artifact). Deliberately
+                #     only USAGE on ORCHESTRATOR.CORE (image repo) — NOT on the
+                #     artifact schema {art}, so held-out stays unreachable.
+                f"GRANT USAGE ON COMPUTE POOL {config.POOL} TO ROLE {dev}",
+                f"GRANT USAGE ON DATABASE {config.DATABASE} TO ROLE {dev}",
+                f"GRANT USAGE ON SCHEMA {config.DATABASE}.{config.SCHEMA} TO ROLE {dev}",
+                f"GRANT READ ON IMAGE REPOSITORY "
+                f"{config.DATABASE}.{config.SCHEMA}.{config.IMAGE_REPO} TO ROLE {dev}",
+                f"GRANT USAGE ON SCHEMA {xchg_schema} TO ROLE {dev}",
+                f"GRANT CREATE SERVICE ON SCHEMA {xchg_schema} TO ROLE {dev}",
+                f"GRANT READ, WRITE ON STAGE {xchg_stage} TO ROLE {dev}",
                 # leaf in the hierarchy: runner may assume it; it assumes nothing up.
                 f"GRANT ROLE {dev} TO ROLE {config.RUNNER_ROLE}",
             ]
