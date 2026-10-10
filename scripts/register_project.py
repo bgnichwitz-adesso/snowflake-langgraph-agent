@@ -274,6 +274,45 @@ def main() -> int:
                 for stmt, err in dev_failed:
                     print(f"    - {stmt.split('TO ROLE')[0].strip()} :: {err}")
 
+            # 3c) TESTER-agent SQL identity (1.8). Separation of Duties: it AUTHORS the
+            # frozen tests (visible + held-out) from the spec — so it reads the project
+            # DB (to understand what to test) + CORTEX, runs as its OWN SPCS job, and
+            # writes test files to the exchange stage. It does NOT get build rights (it
+            # must not write the solution) and does NOT write the authoritative test
+            # tables directly — the host inserts them (host-mediated = SoD-clean). Leaf
+            # role, granted only TO the runner.
+            s = f"{proj_db}.{proj_schema}"
+            tester_grants = [
+                f"GRANT USAGE ON WAREHOUSE {config.WAREHOUSE} TO ROLE {tester}",
+                # read the project DB (schema understanding for meaningful tests)
+                f"GRANT USAGE ON DATABASE {proj_db} TO ROLE {tester}",
+                f"GRANT USAGE ON SCHEMA {s} TO ROLE {tester}",
+                f"GRANT SELECT ON ALL TABLES IN SCHEMA {s} TO ROLE {tester}",
+                f"GRANT SELECT ON FUTURE TABLES IN SCHEMA {s} TO ROLE {tester}",
+                f"GRANT SELECT ON ALL VIEWS IN SCHEMA {s} TO ROLE {tester}",
+                f"GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE {tester}",
+                # service-execution + exchange (runs as its own SPCS job)
+                f"GRANT USAGE ON COMPUTE POOL {config.POOL} TO ROLE {tester}",
+                f"GRANT USAGE ON DATABASE {config.DATABASE} TO ROLE {tester}",
+                f"GRANT USAGE ON SCHEMA {config.DATABASE}.{config.SCHEMA} TO ROLE {tester}",
+                f"GRANT READ ON IMAGE REPOSITORY "
+                f"{config.DATABASE}.{config.SCHEMA}.{config.IMAGE_REPO} TO ROLE {tester}",
+                f"GRANT USAGE ON SCHEMA {xchg_schema} TO ROLE {tester}",
+                f"GRANT CREATE SERVICE ON SCHEMA {xchg_schema} TO ROLE {tester}",
+                f"GRANT READ, WRITE ON STAGE {xchg_stage} TO ROLE {tester}",
+                f"GRANT ROLE {tester} TO ROLE {config.RUNNER_ROLE}",
+            ]
+            t_failed = []
+            for stmt in tester_grants:
+                try:
+                    cur.execute(stmt)
+                except Exception as exc:  # noqa: BLE001
+                    t_failed.append((stmt, f"{type(exc).__name__}: {str(exc)[:120]}"))
+            if t_failed:
+                print(f"  WARN: {len(t_failed)} tester grant(s) failed:")
+                for stmt, err in t_failed:
+                    print(f"    - {stmt.split('TO ROLE')[0].strip()} :: {err}")
+
             # 4) registry row (append-only; skip if an identical ACTIVE row exists)
             existing = _rows(
                 cur,

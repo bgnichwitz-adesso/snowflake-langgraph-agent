@@ -56,12 +56,13 @@ SYSTEM = (
 )
 
 
-def _build_prompt(spec: str, last_output) -> str:
-    p = f"{SYSTEM}\n\n## Task specification (includes the visible tests)\n{spec}\n"
+def _build_prompt(spec: str, last_output, system: str = SYSTEM,
+                  closing: str = "\nBuild the solution now, then write manifest.json.") -> str:
+    p = f"{system}\n\n## Task specification\n{spec}\n"
     if last_output:
         p += ("\n## Your previous attempt FAILED these tests — fix the code:\n"
               f"{str(last_output)[:3000]}\n")
-    p += "\nBuild the solution now, then write manifest.json."
+    p += closing
     return p
 
 
@@ -166,6 +167,10 @@ async def _run_async(prompt: str, cwd: str) -> dict:
     return _collect(result, cwd)
 
 
-def run(spec: str, last_output=None, cwd: str = "/tmp/agent_work") -> dict:
-    """Sync entry for the LangGraph generate() node."""
-    return asyncio.run(_run_async(_build_prompt(spec, last_output), cwd))
+def run(spec: str, last_output=None, cwd: str = "/tmp/agent_work",
+        system: str = SYSTEM,
+        closing: str = "\nBuild the solution now, then write manifest.json.") -> dict:
+    """Sync entry. `system`/`closing` let a different worker (e.g. the TESTER) swap
+    the role prompt while reusing the same tool-sandbox + collection."""
+    return asyncio.run(
+        _run_async(_build_prompt(spec, last_output, system, closing), cwd))

@@ -13,6 +13,7 @@ Status legend: **KEEP** (unchanged) · **ADAPT** (changes at a milestone) ·
 |---|---|---|
 | `orchestrator.py` | In-container LangGraph loop (1.6/1.6b) | **LEGACY** — superseded by the host-driven `scripts/run_loop.py` (M6/B, Form B); kept for reference |
 | `agent_job.py` | DEV-job entrypoint (M6/B): runs AS `ORCH_DEV` in its own SPCS job; reads spec from the exchange stage, runs the tool-sandboxed agent (file tools + SQL, no Bash), writes artifact back | **M6/B ✅ NEW** |
+| `tester_job.py` | TESTER-job entrypoint (1.8): runs AS `ORCH_TEST`; authors `test_visible.py`+`test_heldout.py` from the spec, writes them to the exchange stage (SoD: no build) | **1.8 ✅ NEW** |
 | `gate.py` | PASS/FAIL on exit code only — sole "done" authority | **KEEP** |
 | `agent_worker.py` | Agentic worker (Cortex Code SDK `query()`, `output_format`→structured_output + manifest fallback); **tool-sandboxed** (`can_use_tool`: file tools only, cwd-jailed, no shell/SQL) | **M3/M4 ✅** |
 | `agent_env.py` | Shared auth bootstrap (oauth `connections.toml`, SPCS token) | **M3 ✅ NEW** |
@@ -31,6 +32,7 @@ Status legend: **KEEP** (unchanged) · **ADAPT** (changes at a milestone) ·
 | `p6_roles.py` | Workflow roles + TASK_SPECS/PROJECTS/view + grants | **KEEP** (setup) |
 | `register_project.py` | Onboard a project: roles `ORCH_PROJ_<ID>` (gate), `ORCH_DEV_<ID>` (dev build+SQL), reserved `ORCH_TEST_<ID>`; artifact schema + `TEST_VISIBLE`/`TEST_HELDOUT`; **M6/B:** exchange schema `<ID>_XCHG` + stage (cross-granted both), ORCH_DEV build grants + service-execution | **M6/B ✅** |
 | `run_loop.py` | **Host/runner-driven loop (Form B):** launch DEV job (ORCH_DEV) → pull artifact from exchange stage → gate as ORCH_PROJ (held-out) → RUNS | **M6/B ✅ NEW** |
+| `run_tester.py` | **Host step (1.8):** launch TESTER job (ORCH_TEST) → read generated test files → insert into `TEST_VISIBLE`/`TEST_HELDOUT` (host-mediated). Run before `run_loop.py` | **1.8 ✅ NEW** |
 | `build_push.sh`, `registry_login.sh`, `image_uri.py` | Image pipeline (derives registry host) | **KEEP** |
 | `run_job.py` | Generic SPCS job-service runner | **ADAPT** — add PAT env for the SDK (M-series) |
 | `healthcheck.py` | One-shot end-to-end health check, self-suspending | **ADAPT** — M1: also assert CLI + SDK present in image |
@@ -80,6 +82,9 @@ M5 ✅ → M6 ✅ (in-container loop least-priv) → **M6/B ✅ (agent SQL via i
 host-driven loop `run_loop.py`; held-out unreachable by RBAC; no PAT — network policy blocks PAT from
 SPCS, the OAuth token is exempt)** → **1.8 (next: TESTER generation, role `ORCH_TEST_<ID>` reserved)** →
 Phase 2 (SPEC admission) → Phase 3 (deployment repo).
+**1.8 ✅** — TESTER agent (`ORCH_TEST_<ID>`) authors frozen visible+held-out tests from the spec
+(SoD); `tester_job.py` + `run_tester.py`. **NEXT = Phase 2 (SPEC admission)**, incl. human review of
+generated tests before they are frozen.
 M6/B note: the gate runs host-side (host needs `pytest`); a dedicated gate container is a later
 hardening; `orchestrator.py`/`p16*` remain as the legacy in-container path.
 New app modules: `agent_worker.py` (SDK worker, tool-sandboxed), `agent_env.py` (shared oauth bootstrap),
