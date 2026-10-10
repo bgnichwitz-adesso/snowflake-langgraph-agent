@@ -26,7 +26,13 @@ MAX_TURNS = int(os.environ.get("AGENT_MAX_TURNS", "6"))
 # SQL, no network. This closes both the SQL-read and the token-file-read vectors
 # in a single container (see docs migration M4). A least-priv PAT connection is
 # the documented next-layer hardening for when real tasks need shell/SQL.
-_ALLOWED_TOOLS = {"Read", "Write", "Edit", "MultiEdit", "LS", "Glob", "Grep"}
+# File tools (cwd-jailed) + the built-in Snowflake SQL tool. The SQL tool (name
+# "SQL" in cortex v1.1.66; its input is {action, resource:<query>}, no path) runs
+# under the agent's OWN connection identity. Under M6/B that identity is the
+# least-priv ORCH_APP_<ID> role (PAT), which has NO grant on the orchestrator test
+# tables — so RBAC, not query inspection, keeps held-out unreadable. Bash stays OUT
+# (it could `cat /snowflake/session/token` = the gate identity and escalate).
+_ALLOWED_TOOLS = {"Read", "Write", "Edit", "MultiEdit", "LS", "Glob", "Grep", "SQL"}
 _PATH_KEYS = ("file_path", "path", "notebook_path")
 _FORBIDDEN_SUBSTR = ("/snowflake",)  # never let a path reach the session token
 

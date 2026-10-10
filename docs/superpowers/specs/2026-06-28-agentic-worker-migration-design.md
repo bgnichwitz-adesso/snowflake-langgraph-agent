@@ -113,6 +113,24 @@ Already verified this session: **egress without EAI** (re-confirm full CLI path 
   (7 Bash `find`/`cat`, all WOULD-DENY) and **never tries SQL** against the now-readable table → still
   NEEDS_HUMAN. **Honest caveat:** this agent doesn't attempt SQL; a future model might — but the
   enforce sandbox denies `ExecuteSql` too (`p_m4_guard`), so the layer holds regardless.
+- **M6/B ✅ (done 2026-10-10) — agent SQL via its own identity (Form B):** real Snowflake-app tasks need
+  the agent to run SQL (`CREATE PROCEDURE`/Snowpark, etc.) against the project DB. The dev now has a
+  broad project-scoped build role `ORCH_DEV_<ID>` (COCO-designed; `docs/roles/DEV_ROLE_GRANTS.md`) and the
+  SQL tool. **How it runs without leaking held-out:** the developer agent runs in its OWN SPCS job
+  **owned by `ORCH_DEV_<ID>`**, authenticating with that job's internal SPCS OAuth token — which, unlike
+  a PAT, is **exempt from the account network policy** (a PAT from the SPCS egress is IP-blocked; the
+  OAuth token is not — both proven). The loop is **host/runner-driven** (`scripts/run_loop.py`, Form B):
+  per iteration it launches the DEV job (RUNNER→ORCH_DEV), the agent builds/queries as `ORCH_DEV` and
+  writes its artifact to a **dedicated exchange stage** (`ORCHESTRATOR.<ID>_XCHG.AGENT_STAGE`,
+  cross-granted to both roles), the host pulls it and runs the **gate as `ORCH_PROJ`** (held-out
+  materialized host-side). **Held-out isolation is now pure RBAC:** `ORCH_DEV` has zero access to the
+  artifact schema, and held-out never enters the dev job. `register_project` provisions ORCH_DEV build
+  grants + exchange infra + service-execution; `app/agent_job.py` is the DEV-job entrypoint;
+  `agent_env` back to oauth-only; PAT/secret/network-policy machinery retired (`setup_agent_identity.py`
+  and the PAT-era proofs deleted). **Verified (`p_m6_formb.py`, DEMO):** task-multi→DONE (multi-file),
+  task-feedback→iter0 FAIL then DONE (host-side feedback convergence), task-heldonly→NEEDS_HUMAN
+  (held-out unreachable by ORCH_DEV). NOTE: the gate runs host-side (host needs `pytest`); a dedicated
+  gate container is a later hardening. The in-container `orchestrator.py` loop remains as legacy.
 - **then 1.8** (TESTER generation) on the new base.
 
 ## Open design points (resolve in spec review, not now)

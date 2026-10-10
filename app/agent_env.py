@@ -1,10 +1,11 @@
-"""Shared Cortex Code agent auth bootstrap (in-container).
+"""Cortex Code agent auth bootstrap (in-container).
 
-The agent CLI authenticates with the SPCS internal OAuth token via a
-connections.toml (env token alone is not enough — the CLI resolves the agent
-connection from connections.toml). Single internal identity — NO PAT. Also sets
-offline-safe env (no auto-update / telemetry) so the CLI only touches the
-account host.
+M6/B: the developer agent runs in its OWN SPCS job owned by ORCH_DEV_<ID>, so the
+container's internal SPCS OAuth token already IS the least-priv developer identity
+(ORCH_DEV: project-DB build rights + CORTEX, no orchestrator artifact schema). The
+agent therefore authenticates with that SPCS token via a runtime connections.toml —
+no PAT, no second credential (the PAT path was dropped: the account's network policy
+blocks PAT logins from the SPCS egress, while the internal OAuth token is exempt).
 
 Call bootstrap_agent_auth() before running the SDK; returns (CONN_NAME, AGENT_ENV).
 """
@@ -47,7 +48,7 @@ def _write_connections_toml() -> None:
 
 
 def bootstrap_agent_auth():
-    """Idempotent: export the token, set agent env, write connections.toml.
+    """Idempotent: export the SPCS token, set agent env, write connections.toml.
 
     Returns (CONN_NAME, AGENT_ENV) for CortexCodeAgentOptions(connection=..., env=...).
     """

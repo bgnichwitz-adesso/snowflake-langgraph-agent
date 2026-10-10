@@ -3,3 +3,6 @@
 snowflake-connector-python==4.6.0
 keyring==25.7.0
 keyrings.alt==5.0.2
+# M6/B: the host-driven loop (scripts/run_loop.py) runs the gate (pytest) locally
+# against the DEV job's artifact, so the host needs the test runner too.
+pytest==8.4.2

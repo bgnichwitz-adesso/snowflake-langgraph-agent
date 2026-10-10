@@ -56,7 +56,15 @@ def main() -> int:
 
     pid = a.id.upper()
     role = config.project_role(pid)
+    dev = config.dev_role(pid)                     # ORCH_DEV_<ID> (developer SQL id)
+    tester = config.tester_role(pid)              # ORCH_TEST_<ID> (reserved, 1.8)
     art = config.artifact_schema(pid)              # ORCHESTRATOR.<ID>
+    # Dedicated artifact-EXCHANGE area (M6/B): a neutral schema + stage that BOTH
+    # the gate role (ORCH_PROJ) and the developer-job role (ORCH_DEV) can read/write.
+    # Kept OUT of the artifact schema {art} so ORCH_DEV never gets USAGE where
+    # held-out lives. The DEV job writes its artifact here; the host loop reads it.
+    xchg_schema = f"{config.DATABASE}.{pid}_XCHG"   # ORCHESTRATOR.<ID>_XCHG
+    xchg_stage = f"{xchg_schema}.AGENT_STAGE"
     stage = f"{art}.CODE_STAGE"
     proj_db, proj_schema = a.project_db, a.project_schema
     projects = f"{config.DATABASE}.{config.SCHEMA}.PROJECTS"
@@ -77,11 +85,28 @@ def main() -> int:
             cur.execute(
                 f"CREATE ROLE IF NOT EXISTS {role} COMMENT = '{config.MANAGED_BY}'"
             )
+            # 1b) developer-agent SQL identity (M6/B). Broad build rights on the
+            #     project DB, but NO orchestrator schema (can't read held-out) and
+            #     NO MANAGE GRANTS (can't self-escalate). Grants below.
+            assert_role_free_or_ours(cur, dev)
+            cur.execute(
+                f"CREATE ROLE IF NOT EXISTS {dev} COMMENT = '{config.MANAGED_BY}'"
+            )
+            # 1c) tester-agent SQL identity — RESERVED empty placeholder (1.8). Created
+            #     now (owned by admin) so the dev role — which gets CREATE ROLE below —
+            #     cannot squat the name and own it. Grants come in 1.8.
+            assert_role_free_or_ours(cur, tester)
+            cur.execute(
+                f"CREATE ROLE IF NOT EXISTS {tester} COMMENT = '{config.MANAGED_BY}'"
+            )
 
             # 2) artifact schema + stage + append-only tables (DB-scoped, isolated)
             ddl = [
                 f"CREATE SCHEMA IF NOT EXISTS {art}",
                 f"CREATE STAGE IF NOT EXISTS {stage}",
+                # dedicated exchange area (neutral; no held-out here)
+                f"CREATE SCHEMA IF NOT EXISTS {xchg_schema}",
+                f"CREATE STAGE IF NOT EXISTS {xchg_stage}",
                 f"""CREATE TABLE IF NOT EXISTS {art}.DEV_COMMENTS (
                     task_id    STRING NOT NULL,
                     iteration  INTEGER NOT NULL DEFAULT 0,
@@ -166,11 +191,88 @@ def main() -> int:
                 f"GRANT SELECT ON ALL TABLES IN SCHEMA {proj_db}.{proj_schema} TO ROLE {role}",
                 # allow the role to call Cortex (the loop generates under it)
                 f"GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE {role}",
+                # exchange area: the gate/host reads the DEV job's artifact here
+                f"GRANT USAGE ON SCHEMA {xchg_schema} TO ROLE {role}",
+                f"GRANT READ, WRITE ON STAGE {xchg_stage} TO ROLE {role}",
                 # let the runner assume this project role
                 f"GRANT ROLE {role} TO ROLE {config.RUNNER_ROLE}",
             ]
             for stmt in grants:
                 cur.execute(stmt)
+
+            # 3b) DEVELOPER-agent SQL role (M6/B) — designed with COCO (see
+            # docs/roles/DEV_ROLE_GRANTS.md). MAXIMAL build rights on the PROJECT DB
+            # (all app object types, full DML, run Snowpark Python, CREATE ROLE for
+            # app roles, FUTURE grants WITH GRANT OPTION so it can delegate to those
+            # app roles). Two guardrails hold by construction: (1) NO MANAGE GRANTS +
+            # "can only grant what you hold" -> can't self-escalate or reach the
+            # ORCHESTRATOR schema/held-out (no grant here on {config.DATABASE}); (2)
+            # it's a leaf granted only TO the runner, never granted the tester/gate
+            # roles -> can't acquire them. CREATE ROLE is granted only AFTER the
+            # tester/gate roles already exist above (anti role-name-squatting).
+            s = f"{proj_db}.{proj_schema}"
+            _CREATE = ["TABLE", "VIEW", "MATERIALIZED VIEW", "SEQUENCE", "STAGE",
+                       "FILE FORMAT", "FUNCTION", "PROCEDURE", "STREAM", "TASK",
+                       "DYNAMIC TABLE", "PIPE", "STREAMLIT", "NOTEBOOK"]
+            # (privilege, plural-object) for ALL + FUTURE grants
+            _ALL = [
+                ("SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES", "TABLES"),
+                ("SELECT", "VIEWS"), ("SELECT", "MATERIALIZED VIEWS"),
+                ("READ, WRITE", "STAGES"), ("USAGE", "FUNCTIONS"),
+                ("USAGE", "PROCEDURES"), ("USAGE", "FILE FORMATS"),
+                ("USAGE", "SEQUENCES"), ("OPERATE, MONITOR", "TASKS"),
+                ("OPERATE, MONITOR", "DYNAMIC TABLES"), ("OPERATE, MONITOR", "PIPES"),
+                ("SELECT", "STREAMS"),
+            ]
+            dev_grants = [
+                f"GRANT USAGE ON WAREHOUSE {config.WAREHOUSE} TO ROLE {dev}",
+                f"GRANT USAGE ON DATABASE {proj_db} TO ROLE {dev}",
+                f"GRANT USAGE ON SCHEMA {s} TO ROLE {dev}",
+            ]
+            dev_grants += [f"GRANT CREATE {o} ON SCHEMA {s} TO ROLE {dev}"
+                           for o in _CREATE]
+            dev_grants += [f"GRANT {p} ON ALL {o} IN SCHEMA {s} TO ROLE {dev}"
+                           for p, o in _ALL]
+            # FUTURE grants carry WITH GRANT OPTION so the dev can delegate its
+            # project privileges to the app roles it creates.
+            dev_grants += [f"GRANT {p} ON FUTURE {o} IN SCHEMA {s} "
+                           f"TO ROLE {dev} WITH GRANT OPTION" for p, o in _ALL]
+            dev_grants += [
+                f"GRANT EXECUTE TASK ON ACCOUNT TO ROLE {dev}",
+                f"GRANT EXECUTE MANAGED TASK ON ACCOUNT TO ROLE {dev}",
+                # app roles: dev creates & owns them (tester/gate roles already exist
+                # above, so their names can't be squatted).
+                f"GRANT CREATE ROLE ON ACCOUNT TO ROLE {dev}",
+                f"GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE {dev}",
+                # --- M6/B: run the DEV agent as its OWN SPCS job (owns an exempt
+                #     SPCS token as ORCH_DEV; no PAT). Service-execution rights +
+                #     the exchange area (read input / write artifact). Deliberately
+                #     only USAGE on ORCHESTRATOR.CORE (image repo) — NOT on the
+                #     artifact schema {art}, so held-out stays unreachable.
+                f"GRANT USAGE ON COMPUTE POOL {config.POOL} TO ROLE {dev}",
+                f"GRANT USAGE ON DATABASE {config.DATABASE} TO ROLE {dev}",
+                f"GRANT USAGE ON SCHEMA {config.DATABASE}.{config.SCHEMA} TO ROLE {dev}",
+                f"GRANT READ ON IMAGE REPOSITORY "
+                f"{config.DATABASE}.{config.SCHEMA}.{config.IMAGE_REPO} TO ROLE {dev}",
+                f"GRANT USAGE ON SCHEMA {xchg_schema} TO ROLE {dev}",
+                f"GRANT CREATE SERVICE ON SCHEMA {xchg_schema} TO ROLE {dev}",
+                f"GRANT READ, WRITE ON STAGE {xchg_stage} TO ROLE {dev}",
+                # leaf in the hierarchy: runner may assume it; it assumes nothing up.
+                f"GRANT ROLE {dev} TO ROLE {config.RUNNER_ROLE}",
+            ]
+            # Resilient: one unsupported privilege (edition-dependent, e.g. NOTEBOOK/
+            # STREAMLIT) must not abort registration — collect & report failures.
+            dev_failed = []
+            for stmt in dev_grants:
+                try:
+                    cur.execute(stmt)
+                except Exception as exc:  # noqa: BLE001
+                    dev_failed.append((stmt, f"{type(exc).__name__}: {str(exc)[:120]}"))
+            if dev_failed:
+                print(f"  WARN: {len(dev_failed)} developer grant(s) failed "
+                      f"(edition/privilege support?):")
+                for stmt, err in dev_failed:
+                    print(f"    - {stmt.split('TO ROLE')[0].strip()} :: {err}")
 
             # 4) registry row (append-only; skip if an identical ACTIVE row exists)
             existing = _rows(

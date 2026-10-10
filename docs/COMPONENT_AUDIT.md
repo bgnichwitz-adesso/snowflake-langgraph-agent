@@ -11,7 +11,8 @@ Status legend: **KEEP** (unchanged) · **ADAPT** (changes at a milestone) ·
 ## Container code (`app/`)
 | File | Purpose | Status |
 |---|---|---|
-| `orchestrator.py` | The deterministic LangGraph loop (1.6/1.6b); `generate()`=agent worker, `run_tests` materializes visible/held-out from tables into a transient gate dir | **M4 ✅** |
+| `orchestrator.py` | In-container LangGraph loop (1.6/1.6b) | **LEGACY** — superseded by the host-driven `scripts/run_loop.py` (M6/B, Form B); kept for reference |
+| `agent_job.py` | DEV-job entrypoint (M6/B): runs AS `ORCH_DEV` in its own SPCS job; reads spec from the exchange stage, runs the tool-sandboxed agent (file tools + SQL, no Bash), writes artifact back | **M6/B ✅ NEW** |
 | `gate.py` | PASS/FAIL on exit code only — sole "done" authority | **KEEP** |
 | `agent_worker.py` | Agentic worker (Cortex Code SDK `query()`, `output_format`→structured_output + manifest fallback); **tool-sandboxed** (`can_use_tool`: file tools only, cwd-jailed, no shell/SQL) | **M3/M4 ✅** |
 | `agent_env.py` | Shared auth bootstrap (oauth `connections.toml`, SPCS token) | **M3 ✅ NEW** |
@@ -28,15 +29,17 @@ Status legend: **KEEP** (unchanged) · **ADAPT** (changes at a milestone) ·
 | `sf.py` | Snowflake connection helper (PAT → headless) | **KEEP** |
 | `p2_infra.py` | Create DB/schema/compute pool/image repo | **KEEP** (setup) |
 | `p6_roles.py` | Workflow roles + TASK_SPECS/PROJECTS/view + grants | **KEEP** (setup) |
-| `register_project.py` | Onboard a project: `ORCH_PROJ_<ID>` role, artifact schema, grants, PROJECTS row; creates `TEST_VISIBLE`/`TEST_HELDOUT` tables. **M6:** grants `SELECT` on BOTH to the project role (least-priv loop's in-container gate reads held-out; agent kept out by the tool-sandbox) | **M6 ✅** |
+| `register_project.py` | Onboard a project: roles `ORCH_PROJ_<ID>` (gate), `ORCH_DEV_<ID>` (dev build+SQL), reserved `ORCH_TEST_<ID>`; artifact schema + `TEST_VISIBLE`/`TEST_HELDOUT`; **M6/B:** exchange schema `<ID>_XCHG` + stage (cross-granted both), ORCH_DEV build grants + service-execution | **M6/B ✅** |
+| `run_loop.py` | **Host/runner-driven loop (Form B):** launch DEV job (ORCH_DEV) → pull artifact from exchange stage → gate as ORCH_PROJ (held-out) → RUNS | **M6/B ✅ NEW** |
 | `build_push.sh`, `registry_login.sh`, `image_uri.py` | Image pipeline (derives registry host) | **KEEP** |
 | `run_job.py` | Generic SPCS job-service runner | **ADAPT** — add PAT env for the SDK (M-series) |
 | `healthcheck.py` | One-shot end-to-end health check, self-suspending | **ADAPT** — M1: also assert CLI + SDK present in image |
 | `p1_connect.py` | Connection smoke | **KEEP** (handy; healthcheck also covers it) |
 | `p_m4_agent.py` | Proof: agent code artifacts — multi-file (`app.py`+`mathutil.py`)→DONE+persisted; feedback-driven convergence (unguessable sentinel, iter0 FAIL→DONE) | **M4 ✅ NEW** |
 | `p_m4_guard.py` | Proof (local, no credits): tool-sandbox deny-logic — denies Bash/SQL/session-token/outside-cwd/`..`-traversal, allows only cwd file tools (11/11) | **M4 ✅ NEW** |
-| `p_m4_leak.py` | Proof (in-container): held-out-ONLY unguessable value → NEEDS_HUMAN. `AGENT_SANDBOX=observe` = decisive control: unblocked agent actively hunts the FS for tests (11 Bash searches) but still can't reach held-out (tables + transient gate) | **M4 ✅ NEW** |
-| `p16_loop.py` | Proof: full loop (solvable→DONE, impossible→NEEDS_HUMAN); seeds tests into `TEST_VISIBLE`/`TEST_HELDOUT` | **KEEP** (agent worker) |
+| `p_m6_formb.py` | Proof (Form B, host loop): task-feedback→iter0 FAIL then DONE (host-side convergence); task-heldonly→NEEDS_HUMAN (held-out unreachable by ORCH_DEV) | **M6/B ✅ NEW** |
+| ~~`p_m4_leak.py` / `p_m6_sql_probe.py` / `p_m6_devtoken_probe.py`~~ | PAT-era leak/SQL/token probes | **DELETED (M6/B)** — superseded by `p_m6_formb.py` (PAT approach dropped) |
+| `p16_loop.py` | Proof: full loop (solvable→DONE, impossible→NEEDS_HUMAN); seeds tests into `TEST_VISIBLE`/`TEST_HELDOUT` | **LEGACY** (in-container loop) |
 | `p16b_role_scoping.py` | Proof: loop runs least-priv as `ORCH_PROJ_<ID>` (container owned by project role; in-container gate reads held-out via the M6 grant) → DONE | **M6 ✅** |
 | ~~`p14_stage_io.py`~~ / ~~`p15_test_gate.py`~~ | old stage-I/O / gate proofs | **DELETED** — superseded by `p16*` + `p_m4_agent` |
 | ~~`p0_enable_idtoken.py`~~ | Enable SSO id-token caching | **RETIRED** — PAT path chosen instead |
@@ -73,10 +76,12 @@ fixture `DEMO_PROJ.PUBLIC.SAMPLE_DATA`). Healthcheck 5/5 OK.
 
 ## Forward path
 M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ (agent code artifacts; held-out in separate tables + tool-sandbox) →
-M5 ✅ (e2e behaviours covered by M4 proofs) → M6 ✅ (whole loop runs least-priv AS `ORCH_PROJ_<ID>`;
-in-container gate reads held-out via a grant; agent kept out by the sandbox — verified incl. an
-unblocked least-priv control) → **1.8 (next: TESTER generation)** → Phase 2 (SPEC admission) →
-Phase 3 (deployment repo).
+M5 ✅ → M6 ✅ (in-container loop least-priv) → **M6/B ✅ (agent SQL via its OWN `ORCH_DEV` SPCS job;
+host-driven loop `run_loop.py`; held-out unreachable by RBAC; no PAT — network policy blocks PAT from
+SPCS, the OAuth token is exempt)** → **1.8 (next: TESTER generation, role `ORCH_TEST_<ID>` reserved)** →
+Phase 2 (SPEC admission) → Phase 3 (deployment repo).
+M6/B note: the gate runs host-side (host needs `pytest`); a dedicated gate container is a later
+hardening; `orchestrator.py`/`p16*` remain as the legacy in-container path.
 New app modules: `agent_worker.py` (SDK worker, tool-sandboxed), `agent_env.py` (shared oauth bootstrap),
 `agent_hello.py` (M2 proof), `agent_smoke.py` (M1 proof). CLI pinned `1.1.66+001753.801adc2b71d7`.
 RESOLVED (M4) — TWO independent layers, both verified: (a) held-out off the mounted stage (separate

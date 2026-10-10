@@ -58,9 +58,38 @@ def project_role(project_id: str) -> str:
     return f"{ROLE_PREFIX}_PROJ_{project_id.upper()}"
 
 
+def dev_role(project_id: str) -> str:
+    """Per-project DEVELOPER-agent SQL identity (M6/B), e.g. ORCH_DEV_DEMO.
+    Broad build rights on the PROJECT DB (all app object types, DML, CREATE ROLE
+    for app roles, future grants WITH GRANT OPTION) + CORTEX, but NO access to the
+    orchestrator artifact schema (so the developer agent's SQL can't read held-out
+    tests) and NO MANAGE GRANTS (so it can't self-escalate). Separate from the
+    tester identity (ORCH_TEST_<ID>, 1.8) by Separation of Duties."""
+    return f"{ROLE_PREFIX}_DEV_{project_id.upper()}"
+
+
+def tester_role(project_id: str) -> str:
+    """Per-project TESTER-agent SQL identity (1.8), e.g. ORCH_TEST_DEMO. Reserved
+    now (empty placeholder created by register_project) to prevent the developer
+    role from squatting the name via CREATE ROLE. Filled with grants in 1.8."""
+    return f"{ROLE_PREFIX}_TEST_{project_id.upper()}"
+
+
 def artifact_schema(project_id: str) -> str:
     """Per-project artifact schema, e.g. ORCHESTRATOR.DEMO."""
     return f"{DATABASE}.{project_id.upper()}"
+
+
+def exchange_schema(project_id: str) -> str:
+    """Neutral artifact-exchange schema (M6/B), e.g. ORCHESTRATOR.DEMO_XCHG. Holds
+    only the exchange stage (no held-out) so the DEV-job role ORCH_DEV can share
+    artifacts with the gate/host without reaching the artifact schema."""
+    return f"{DATABASE}.{project_id.upper()}_XCHG"
+
+
+def exchange_stage(project_id: str) -> str:
+    """Fully-qualified exchange stage, e.g. ORCHESTRATOR.DEMO_XCHG.AGENT_STAGE."""
+    return f"{exchange_schema(project_id)}.AGENT_STAGE"
 
 # --- Image repository / image ---
 IMAGE_REPO = _get("SF_IMAGE_REPO", "IMAGES")
