@@ -84,9 +84,16 @@ def artifact_schema(project_id: str) -> str:
 AGENT_USER = _get("SF_AGENT_USER", f"{ROLE_PREFIX}_AGENT")
 
 
-def pat_secret(project_id: str) -> str:
-    """Fully-qualified SPCS secret holding the developer-agent PAT for this project."""
-    return f"{DATABASE}.{project_id.upper()}.AGENT_PAT"
+def exchange_schema(project_id: str) -> str:
+    """Neutral artifact-exchange schema (M6/B), e.g. ORCHESTRATOR.DEMO_XCHG. Holds
+    only the exchange stage (no held-out) so the DEV-job role ORCH_DEV can share
+    artifacts with the gate/host without reaching the artifact schema."""
+    return f"{DATABASE}.{project_id.upper()}_XCHG"
+
+
+def exchange_stage(project_id: str) -> str:
+    """Fully-qualified exchange stage, e.g. ORCHESTRATOR.DEMO_XCHG.AGENT_STAGE."""
+    return f"{exchange_schema(project_id)}.AGENT_STAGE"
 
 # --- Image repository / image ---
 IMAGE_REPO = _get("SF_IMAGE_REPO", "IMAGES")
