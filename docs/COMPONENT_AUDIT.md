@@ -40,8 +40,7 @@ Status legend: **KEEP** (unchanged) · **ADAPT** (changes at a milestone) ·
 | `p1_connect.py` | Connection smoke | **KEEP** (handy; healthcheck also covers it) |
 | `p_m4_agent.py` | Proof: agent code artifacts — multi-file (`app.py`+`mathutil.py`)→DONE+persisted; feedback-driven convergence (unguessable sentinel, iter0 FAIL→DONE) | **M4 ✅ NEW** |
 | `p_m4_guard.py` | Proof (local, no credits): tool-sandbox deny-logic — denies Bash/SQL/session-token/outside-cwd/`..`-traversal, allows only cwd file tools (11/11) | **M4 ✅ NEW** |
-| `p_m6_formb.py` | Proof (Form B, host loop): task-feedback→iter0 FAIL then DONE (host-side convergence); task-heldonly→NEEDS_HUMAN (held-out unreachable by ORCH_DEV) | **M6/B ✅ NEW** |
-| ~~`p_m4_leak.py` / `p_m6_sql_probe.py` / `p_m6_devtoken_probe.py`~~ | PAT-era leak/SQL/token probes | **DELETED (M6/B)** — superseded by `p_m6_formb.py` (PAT approach dropped) |
+| ~~`p_m4_leak.py` / `p_m6_sql_probe.py` / `p_m6_devtoken_probe.py` / `p_m6_formb.py`~~ | PAT-era + Form-B host-loop proofs | **DELETED** — superseded by Form A (in-container loop + `p_a_nested_probe.py`) |
 | `p16_loop.py` | Proof: full loop (solvable→DONE, impossible→NEEDS_HUMAN); seeds tests into `TEST_VISIBLE`/`TEST_HELDOUT` | **LEGACY** (in-container loop) |
 | `p16b_role_scoping.py` | Proof: loop runs least-priv as `ORCH_PROJ_<ID>` (container owned by project role; in-container gate reads held-out via the M6 grant) → DONE | **M6 ✅** |
 | ~~`p14_stage_io.py`~~ / ~~`p15_test_gate.py`~~ | old stage-I/O / gate proofs | **DELETED** — superseded by `p16*` + `p_m4_agent` |
@@ -79,10 +78,11 @@ fixture `DEMO_PROJ.PUBLIC.SAMPLE_DATA`). Healthcheck 5/5 OK.
 
 ## Forward path
 M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ (agent code artifacts; held-out in separate tables + tool-sandbox) →
-M5 ✅ → M6 ✅ (in-container loop least-priv) → **M6/B ✅ (agent SQL via its OWN `ORCH_DEV` SPCS job;
-host-driven loop `run_loop.py`; held-out unreachable by RBAC; no PAT — network policy blocks PAT from
-SPCS, the OAuth token is exempt)** → **1.8 (next: TESTER generation, role `ORCH_TEST_<ID>` reserved)** →
-Phase 2 (SPEC admission) → Phase 3 (deployment repo).
+M5 ✅ → M6 ✅ (in-container loop least-priv) → M6/B ✅ (agent SQL via its OWN `ORCH_DEV` SPCS job;
+held-out unreachable by RBAC; no PAT — network policy blocks PAT from SPCS, the OAuth token is exempt) →
+1.8 ✅ (TESTER generation, SoD) → **Form A ✅ (loop back in-container + LangGraph; nodes launch nested
+ORCH_TEST/ORCH_DEV child jobs; host loop reverted)** → **NEXT: UI/monitoring + Phase 2 (SPEC admission)**
+→ Phase 3 (deployment repo).
 **1.8 ✅** — TESTER agent (`ORCH_TEST_<ID>`) authors frozen visible+held-out tests from the spec (SoD).
 **Form A ✅ (2026-10-10)** — the loop is back **in-container + LangGraph** (`orchestrator.py`), launching
 nested ORCH_TEST/ORCH_DEV child jobs; thin launcher `run.py`; host loop reverted. Gate runs in-container
